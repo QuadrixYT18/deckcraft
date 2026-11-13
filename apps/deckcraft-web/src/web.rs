@@ -28,6 +28,19 @@ pub fn start() {
         // opens presentations in it and stores what it saves (`host`); `data-host="page"` on the
         // canvas opts a page in that runs DeckCraft in its own document. The presenter popup is
         // never the framed page.
+        // An audience window that lost the editor that opened it (it was reloaded, or the editor
+        // tab closed or reloaded): open the editor here instead of failing. The tab's copy of
+        // the live-session token joins the session again.
+        if crate::presenter::token().is_some()
+            && let Some(window) = web_sys::window()
+            && window.opener().map_or(true, |o| o.is_null() || o.is_undefined())
+        {
+            let path = window.location().pathname().unwrap_or_else(|_| "/".into());
+            let search = window.location().search().unwrap_or_default();
+            if window.location().replace(&format!("{path}{search}")).is_ok() {
+                return;
+            }
+        }
         let hosted = crate::presenter::token().is_none();
         let bridge = if hosted { crate::host::Bridge::detect(&canvas) } else { None };
         if hosted && bridge.is_none() && query_param("host").as_deref() == Some("parent") {
@@ -59,11 +72,17 @@ pub fn start() {
                         bridge.connect(&mut services, cc.egui_ctx.clone());
                     }
                     let mut app = SlideApp::new(Session::new(), services);
+                    // Arrived from the server's join page (`#token=`): only the shared presentation opens.
+                    let live_token = crate::live_net::token_from_fragment();
                     // In host mode the parent sends the presentation to edit; no sample meanwhile.
                     if app_bridge.is_some() {
                         if let Err(e) = app.start_for_host() {
                             log::error!("new presentation: {e}");
                         }
+                    } else if live_token.is_some() {
+                        // The live session's presentation arrives with the welcome.
+                    } else if crate::live_net::redirect_to_join_page() {
+                        // Served by a DeckCraft server without a session: the join page instead.
                     } else if !query_has("blank") {
                         if let Err(e) = deckcraft_engine::sample::open_sample(&mut app.session) {
                             log::error!("sample deck: {e}");
@@ -78,6 +97,10 @@ pub fn start() {
                         && let Some(author) = query_param("author")
                     {
                         crate::host::Bridge::set_author(&mut app, &author);
+                    }
+                    // Arrived from the server's join page: join that live session.
+                    if let (Some(token), Some(origin)) = (live_token, web_sys::window().and_then(|w| w.location().origin().ok())) {
+                        deckcraft_ui_egui::live::join_with_token(&mut app, &origin, &token);
                     }
                     crate::api::install(&mut app, cc.egui_ctx.clone());
                     Ok(Box::new(WebShell { app, inbox, bridge: app_bridge }))
@@ -186,6 +209,7 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
     };
     Services {
         presenter,
+        live_net: Some(Box::new(crate::live_net::WebNet::new(ctx.clone()))),
         open_async: Some(Box::new(move |purpose: &str, request: u64| {
             let inbox = open_inbox.clone();
             let ctx = ctx.clone();

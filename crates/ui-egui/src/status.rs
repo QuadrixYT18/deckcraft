@@ -41,9 +41,27 @@ pub fn status_bar(app: &mut SlideApp, ui: &mut Ui) {
                 app.dialog = Some(crate::dialogs::Dialog::new("language"));
             }
         }
+        // Live session: connection and people; a click opens Review › Live Session.
+        let mut after = lr.max.x;
+        if let Some((badge, ok)) = app.live.as_ref().map(crate::live::Live::badge) {
+            let bx = (lr.max.x + 16.0).min(right_x);
+            let clip = Rect::from_min_max(pos2(bx - 3.0, rect.min.y), pos2(right_x.max(bx), rect.max.y));
+            let colour = if ok { t.accent } else { t.text_dim };
+            let br =
+                p.with_clip_rect(clip).text(pos2(bx, rect.center().y), Align2::LEFT_CENTER, format!("\u{25cf} {badge}"), theme::font(12.0), colour);
+            let hit = br.expand(3.0).intersect(clip);
+            if hit.is_positive() {
+                let resp = ui.interact(hit, ui.scope_id().with("status_live"), Sense::click()).on_hover_text("Live Session");
+                resp.widget_info(|| named_with_value("Live Session", &badge));
+                if resp.clicked() {
+                    app.dialog = Some(crate::dialogs::Dialog::new("live"));
+                }
+            }
+            after = br.max.x;
+        }
         // Transient status message, clipped before the controls on the right.
         if let Some(msg) = app.fresh_status() {
-            let mx = (rect.min.x + 290.0).max(lr.max.x + 16.0);
+            let mx = (rect.min.x + 290.0).max(after + 16.0);
             let clip = Rect::from_min_max(pos2(mx, rect.min.y), pos2(right_x.max(mx), rect.max.y));
             let mr = p.with_clip_rect(clip).text(pos2(mx, rect.center().y), Align2::LEFT_CENTER, &msg, theme::font(12.0), t.accent);
             shown_text(ui, mr.intersect(clip), "status_message", &msg);

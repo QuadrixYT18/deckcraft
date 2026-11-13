@@ -19,6 +19,17 @@ fn comment_nav(app: &mut SlideApp, ui: &mut Ui, forward: bool) {
 
 pub(super) fn review(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
+        // Several people editing at once (desktop and browser): start, join, see the access code.
+        let live = app.live.as_ref().is_some_and(crate::live::Live::is_active);
+        if big_button_ex(ui, Icon::Share, "Live\nSession", app.services.live_net.is_some(), false, live)
+            .0
+            .on_hover_text("Edit this presentation together with others")
+            .clicked()
+        {
+            app.dialog = Some(crate::dialogs::Dialog::new("live"));
+        }
+    });
+    group(ui, |ui| {
         big(app, ui, Icon::Spelling, "Spelling", "app.dialog", json!({"id": "spelling"}));
         big(app, ui, Icon::Thesaurus, "Thesaurus", "review.thesaurusPane", json!({}));
     });

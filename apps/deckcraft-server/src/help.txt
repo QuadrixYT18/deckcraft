@@ -1,0 +1,23 @@
+deckcraft-server: DeckCraft live sessions (collaboration server, host dashboard, browser editor)
+
+Usage: deckcraft-server
+
+Settings (environment variables):
+  DECKCRAFT_MODE             development (default) or production
+  DECKCRAFT_BIND             address to listen on (default 0.0.0.0:8080)
+  DECKCRAFT_DATA             data folder (default ./deckcraft-data)
+  DECKCRAFT_WEB_DIR          the browser editor build (default ./dist/web)
+  DECKCRAFT_ADMIN_PASSWORD   host password for the dashboard from other computers
+                             (required in production, at least 12 characters)
+  DECKCRAFT_PUBLIC_URL       the address people use, e.g. https://deck.example.com
+                             (required in production, must be https)
+  DECKCRAFT_JWT_SECRET       token signing secret, at least 32 characters
+                             (default: a random key kept in <data>/secret.key)
+  DECKCRAFT_ALLOWED_ORIGINS  other web origins allowed to call the API, comma separated
+  DECKCRAFT_OPEN_DASHBOARD   1: the dashboard opens from every device without a password
+                             (development mode only)
+  DECKCRAFT_TRUST_LOOPBACK   1/0: the dashboard opens without a password on this computer
+                             (default 1 in development, 0 in production)
+
+On the server's computer, open http://localhost:8080/host to start a session and see its code.
+Stop with Ctrl+C: every session is saved first.

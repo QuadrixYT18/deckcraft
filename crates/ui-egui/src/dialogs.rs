@@ -38,6 +38,7 @@ fn title(id: &str) -> &'static str {
         "hyperlink" => "Insert Hyperlink",
         "setupShow" => "Set Up Slide Show",
         "zoom" => "Zoom",
+        "live" => "Live Session",
         "comment" => "New Comment",
         "altText" => "Alt Text",
         "outline" => "Slides from Outline",

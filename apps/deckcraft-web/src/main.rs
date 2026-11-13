@@ -11,7 +11,9 @@
 //!   that started the pick (a dismissed picker or a closed document drops the file);
 //! - Save and Export trigger a browser download (or go to the framing page with `?host=parent`);
 //! - dropped files are read asynchronously by `web::WebShell` and delivered through the inbox;
-//! - preferences are not persisted.
+//! - preferences are not persisted;
+//! - live sessions use the browser's WebSocket and fetch; `#token=` (from the server's join page)
+//!   joins that session at start.
 //!
 //! URL query flags: `?webgl` forces the WebGL2 backend instead of WebGPU; `?blank` starts with an
 //! empty presentation instead of the sample deck; `?show` starts the slide show.
@@ -25,6 +27,8 @@
 mod api;
 #[cfg(target_arch = "wasm32")]
 mod host;
+#[cfg(target_arch = "wasm32")]
+mod live_net;
 #[cfg(target_arch = "wasm32")]
 mod presenter;
 #[cfg(target_arch = "wasm32")]
