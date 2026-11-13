@@ -26,7 +26,14 @@ fn start(dir: &std::path::Path) -> SocketAddr {
         trust_loopback: true,
         open_dashboard: false,
     };
-    let app = Arc::new(App { cfg, secret: vec![9; 32], sessions: Mutex::default(), limiter: Mutex::default(), next_conn: AtomicU64::new(1) });
+    let app = Arc::new(App {
+        cfg,
+        secret: vec![9; 32],
+        sessions: Mutex::default(),
+        limiter: Mutex::default(),
+        next_conn: AtomicU64::new(1),
+        gzipped: Default::default(),
+    });
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
         rt.block_on(async move {

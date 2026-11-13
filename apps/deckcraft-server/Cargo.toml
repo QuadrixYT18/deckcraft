@@ -27,6 +27,8 @@ hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.3"
+# gzip for the browser editor (its .wasm is ~40 MB raw, a fraction compressed).
+flate2 = "1"
 # The invitation link as a QR code (SVG) on the session page.
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 

@@ -69,6 +69,8 @@ pub struct App {
     pub sessions: Mutex<BTreeMap<String, Arc<Session>>>,
     pub limiter: Mutex<auth::Limiter>,
     pub next_conn: AtomicU64,
+    /// The browser editor's files, gzip-compressed once: (file name, size, modified) → bytes.
+    pub gzipped: std::sync::Mutex<std::collections::HashMap<(String, u64, std::time::SystemTime), Arc<Vec<u8>>>>,
 }
 
 impl App {
@@ -195,7 +197,14 @@ async fn main() {
     let sessions: BTreeMap<String, Arc<Session>> =
         store::load_all(&cfg.data).into_iter().filter_map(|s| s.info.try_lock().ok().map(|i| i.id.clone()).map(|id| (id, s.clone()))).collect();
     let bind = cfg.bind;
-    let app = Arc::new(App { cfg, secret, sessions: Mutex::new(sessions), limiter: Mutex::default(), next_conn: AtomicU64::new(1) });
+    let app = Arc::new(App {
+        cfg,
+        secret,
+        sessions: Mutex::new(sessions),
+        limiter: Mutex::default(),
+        next_conn: AtomicU64::new(1),
+        gzipped: Default::default(),
+    });
     let listener = match tokio::net::TcpListener::bind(bind).await {
         Ok(l) => l,
         Err(e) => {
@@ -205,6 +214,8 @@ async fn main() {
     };
     banner(&app);
     tokio::spawn(saver(app.clone()));
+    // Compress the editor's files now, so the first visitor doesn't wait for it.
+    tokio::spawn(warm_gzip(app.clone()));
     let router = router(app.clone());
     let served = axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>()).with_graceful_shutdown(async {
         let _ = tokio::signal::ctrl_c().await;
@@ -809,7 +820,7 @@ async fn ws(State(app): AppState, headers: HeaderMap, upgrade: WebSocketUpgrade)
 }
 
 /// The browser editor's files, from `DECKCRAFT_WEB_DIR`.
-async fn static_file(State(app): AppState, path: Option<Path<String>>) -> Response {
+async fn static_file(State(app): AppState, headers: HeaderMap, path: Option<Path<String>>) -> Response {
     let rel = path.map(|Path(p)| p).unwrap_or_default();
     let rel = if rel.is_empty() { "index.html".to_string() } else { rel };
     // Only plain names below the folder: no `..`, no absolute paths, no hidden files.
@@ -817,7 +828,7 @@ async fn static_file(State(app): AppState, path: Option<Path<String>>) -> Respon
         return StatusCode::NOT_FOUND.into_response();
     }
     let file = app.cfg.web_dir.join(&rel);
-    let Ok(bytes) = tokio::fs::read(&file).await else {
+    let Ok(meta) = tokio::fs::metadata(&file).await else {
         if rel == "index.html" {
             return error_page(
                 StatusCode::NOT_FOUND,
@@ -827,8 +838,8 @@ async fn static_file(State(app): AppState, path: Option<Path<String>>) -> Respon
         }
         return StatusCode::NOT_FOUND.into_response();
     };
-    let ext = rel.rsplit('.').next().unwrap_or("");
-    let mime = match ext {
+    let ext = rel.rsplit('.').next().unwrap_or("").to_string();
+    let mime = match ext.as_str() {
         "html" => "text/html; charset=utf-8",
         "js" => "text/javascript",
         "wasm" => "application/wasm",
@@ -841,7 +852,65 @@ async fn static_file(State(app): AppState, path: Option<Path<String>>) -> Respon
     };
     // Hashed file names never change; the page itself always revalidates.
     let cache = if ext == "html" { "no-cache" } else { "public, max-age=31536000, immutable" };
-    ([(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, cache)], bytes).into_response()
+    let accepts_gzip = headers.get(header::ACCEPT_ENCODING).and_then(|h| h.to_str().ok()).is_some_and(|v| v.contains("gzip"));
+    if accepts_gzip
+        && compressible(&ext)
+        && let Some(gz) = gzipped(&app, &rel, &file, &meta).await
+    {
+        return (
+            [(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, cache), (header::CONTENT_ENCODING, "gzip"), (header::VARY, "Accept-Encoding")],
+            gz.as_ref().clone(),
+        )
+            .into_response();
+    }
+    match tokio::fs::read(&file).await {
+        Ok(bytes) => ([(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, cache), (header::VARY, "Accept-Encoding")], bytes).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+fn compressible(ext: &str) -> bool {
+    matches!(ext, "wasm" | "js" | "html" | "css" | "svg" | "json" | "webmanifest")
+}
+
+/// The file gzip-compressed, made once per version of the file and kept in memory.
+async fn gzipped(app: &App, rel: &str, file: &std::path::Path, meta: &std::fs::Metadata) -> Option<Arc<Vec<u8>>> {
+    let key = (rel.to_string(), meta.len(), meta.modified().ok()?);
+    if let Some(hit) = app.gzipped.lock().ok()?.get(&key) {
+        return Some(hit.clone());
+    }
+    let file = file.to_path_buf();
+    let gz = tokio::task::spawn_blocking(move || -> std::io::Result<Vec<u8>> {
+        use std::io::Write as _;
+        let raw = std::fs::read(&file)?;
+        let mut enc = flate2::write::GzEncoder::new(Vec::with_capacity(raw.len() / 3), flate2::Compression::best());
+        enc.write_all(&raw)?;
+        enc.finish()
+    })
+    .await
+    .ok()?
+    .ok()?;
+    let gz = Arc::new(gz);
+    let mut cache = app.gzipped.lock().ok()?;
+    // Older versions of the same file (after a rebuild) are dropped.
+    cache.retain(|(name, _, _), _| name != rel);
+    cache.insert(key, gz.clone());
+    Some(gz)
+}
+
+/// Compress every file of the browser editor in the background.
+async fn warm_gzip(app: Arc<App>) {
+    let Ok(mut dir) = tokio::fs::read_dir(&app.cfg.web_dir).await else { return };
+    while let Ok(Some(entry)) = dir.next_entry().await {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let ext = name.rsplit('.').next().unwrap_or("").to_string();
+        if name.starts_with('.') || !compressible(&ext) {
+            continue;
+        }
+        if let Ok(meta) = entry.metadata().await {
+            gzipped(&app, &name, &entry.path(), &meta).await;
+        }
+    }
 }
 
 #[cfg(test)]

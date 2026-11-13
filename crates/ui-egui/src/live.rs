@@ -412,11 +412,18 @@ pub fn tick(app: &mut SlideApp, ctx: &egui::Context) {
     for ev in events {
         match ev {
             LiveSocketEvent::Open => {
+                let mut first = false;
                 if let Some(live) = app.live.as_mut() {
                     live.backoff = Duration::from_secs(1);
                     if let Some(c) = live.client.as_mut() {
                         c.connected();
                     }
+                    first = live.uid.is_none();
+                }
+                if first {
+                    // The whole presentation (pictures included) comes next; on a slow network or
+                    // with many photos that takes a while, and there is only the start screen.
+                    app.notify("Live session: connected. Loading the presentation…");
                 }
             }
             LiveSocketEvent::Text(text) => {
