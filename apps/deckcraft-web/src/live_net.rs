@@ -120,7 +120,12 @@ impl LiveNet for WebNet {
     }
 
     fn poll(&mut self) -> Vec<LiveSocketEvent> {
-        std::mem::take(&mut *self.events.borrow_mut())
+        let events = std::mem::take(&mut *self.events.borrow_mut());
+        // The server ended this person's session: a reload must not try to join it again.
+        if events.iter().any(|e| matches!(e, LiveSocketEvent::Text(t) if t.starts_with(r#"{"t":"closed""#))) {
+            forget_token();
+        }
+        events
     }
 
     fn close(&mut self) {
@@ -139,14 +144,43 @@ impl LiveNet for WebNet {
     }
 }
 
+/// The tab's storage key for the live-session token (cleared when the tab closes).
+const TOKEN_KEY: &str = "deckcraft.live.token";
+
 /// `#token=…` from the server's join page: join that session, and take the token out of the
-/// address bar so it isn't bookmarked or shared by accident.
+/// address bar so it isn't bookmarked or shared by accident. The tab keeps it (sessionStorage),
+/// so a reload, including one the browser does by itself after reclaiming memory, joins again.
 pub fn token_from_fragment() -> Option<String> {
     let window = web_sys::window()?;
-    let hash = window.location().hash().ok()?;
-    let token = hash.strip_prefix("#token=")?.split('&').next()?.to_string();
-    if let (Ok(history), Ok(path), Ok(search)) = (window.history(), window.location().pathname(), window.location().search()) {
-        let _ = history.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&format!("{path}{search}")));
+    let storage = window.session_storage().ok().flatten();
+    let hash = window.location().hash().ok().unwrap_or_default();
+    let fresh = hash.strip_prefix("#token=").and_then(|t| t.split('&').next()).map(str::to_string).filter(|t| !t.is_empty() && t.len() < 4096);
+    if let Some(token) = &fresh {
+        if let Some(s) = &storage {
+            let _ = s.set_item(TOKEN_KEY, token);
+        }
+        if let (Ok(history), Ok(path), Ok(search)) = (window.history(), window.location().pathname(), window.location().search()) {
+            let _ = history.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&format!("{path}{search}")));
+        }
+        return fresh;
     }
-    (!token.is_empty() && token.len() < 4096).then_some(token)
+    storage.and_then(|s| s.get_item(TOKEN_KEY).ok().flatten()).filter(|t| !t.is_empty() && t.len() < 4096)
+}
+
+/// The editor served by a DeckCraft server (`/app/`) without a session: send the visitor to the
+/// join page instead of showing the sample presentation. Returns `true` when it redirected.
+pub fn redirect_to_join_page() -> bool {
+    let Some(window) = web_sys::window() else { return false };
+    let path = window.location().pathname().unwrap_or_default();
+    if !path.starts_with("/app") {
+        return false;
+    }
+    window.location().set_href("/").is_ok()
+}
+
+/// Forget the tab's session (the host ended it or removed this person).
+pub fn forget_token() {
+    if let Some(s) = web_sys::window().and_then(|w| w.session_storage().ok().flatten()) {
+        let _ = s.remove_item(TOKEN_KEY);
+    }
 }

@@ -24,6 +24,7 @@ fn start(dir: &std::path::Path) -> SocketAddr {
         public_url: None,
         allowed_origins: vec![],
         trust_loopback: true,
+        open_dashboard: false,
     };
     let app = Arc::new(App { cfg, secret: vec![9; 32], sessions: Mutex::default(), limiter: Mutex::default(), next_conn: AtomicU64::new(1) });
     std::thread::spawn(move || {

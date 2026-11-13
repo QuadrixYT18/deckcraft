@@ -18,6 +18,8 @@ deckcraft-render = { workspace = true }
 deckcraft-anim = { workspace = true }
 deckcraft-engine = { workspace = true }
 deckcraft-collab = { workspace = true }
+# The invitation link as a QR code in the Live Session dialog (no image dependencies).
+qrcode = { version = "0.14", default-features = false }
 deckcraft-format = { workspace = true }
 deckcraft-media = { workspace = true }
 egui = { workspace = true, features = ["default_fonts", "monochrome_emoji_fonts"] }

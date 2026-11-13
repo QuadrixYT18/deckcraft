@@ -602,6 +602,11 @@ fn session_view(app: &mut SlideApp, ui: &mut Ui, t: Tokens) -> bool {
             });
             if let Some(link) = &live.invite {
                 ui.add(egui::Label::new(RichText::new(link).monospace().size(11.0).color(t.text_dim)).selectable(true));
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    qr_code(ui, link, 180.0);
+                    ui.label(RichText::new("Scan with a phone or tablet\nto join this session.").color(t.text_dim));
+                });
             }
             ui.add_space(6.0);
         }
@@ -636,4 +641,24 @@ fn session_view(app: &mut SlideApp, ui: &mut Ui, t: Tokens) -> bool {
         leave(app);
     }
     close
+}
+
+/// `text` as a QR code `size` points wide, dark on a white quiet zone (readable in dark mode too).
+fn qr_code(ui: &mut Ui, text: &str, size: f32) {
+    let Ok(code) = qrcode::QrCode::new(text.as_bytes()) else { return };
+    let width = code.width();
+    let colors = code.to_colors();
+    let (rect, _) = ui.allocate_exact_size(vec2(size, size), egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 4.0, Color32::WHITE);
+    // Four modules of quiet zone on each side.
+    let cells = width + 8;
+    let m = size / cells as f32;
+    for (i, c) in colors.iter().enumerate() {
+        if *c == qrcode::Color::Dark {
+            let (x, y) = ((i % width + 4) as f32, (i / width + 4) as f32);
+            let r = egui::Rect::from_min_size(rect.min + vec2(x * m, y * m), vec2(m + 0.3, m + 0.3));
+            painter.rect_filled(r, 0.0, Color32::BLACK);
+        }
+    }
 }

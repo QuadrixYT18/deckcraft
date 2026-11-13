@@ -58,6 +58,9 @@ pub struct Config {
     pub allowed_origins: Vec<String>,
     /// Requests from this computer (to `localhost`) may use the host dashboard without a password.
     pub trust_loopback: bool,
+    /// Everyone who can reach the server may use the host dashboard, with no password
+    /// (`DECKCRAFT_OPEN_DASHBOARD=1`, development mode only: a trusted home or office network).
+    pub open_dashboard: bool,
 }
 
 pub struct App {
@@ -114,6 +117,10 @@ fn config() -> Result<Config, String> {
     if mode == Mode::Production && admin_password.as_ref().is_none_or(|p| p.chars().count() < 12) {
         return Err("production mode needs DECKCRAFT_ADMIN_PASSWORD with at least 12 characters".into());
     }
+    let open_dashboard = matches!(env("DECKCRAFT_OPEN_DASHBOARD").as_deref(), Some("1") | Some("true") | Some("yes"));
+    if mode == Mode::Production && open_dashboard {
+        return Err("DECKCRAFT_OPEN_DASHBOARD is for trusted local networks only; production mode needs DECKCRAFT_ADMIN_PASSWORD".into());
+    }
     let public_url = env("DECKCRAFT_PUBLIC_URL");
     if mode == Mode::Production && !public_url.as_deref().is_some_and(|u| u.starts_with("https://")) {
         return Err("production mode needs DECKCRAFT_PUBLIC_URL=https://… (put the server behind a TLS proxy; the socket is then wss://)".into());
@@ -133,6 +140,7 @@ fn config() -> Result<Config, String> {
             Some(_) => true,
             None => mode == Mode::Development,
         },
+        open_dashboard,
     })
 }
 
@@ -215,6 +223,10 @@ fn banner(app: &App) {
     println!("  data:       {}", app.cfg.data.display());
     println!("  host:       http://localhost:{}/host   (on this computer)", app.cfg.bind.port());
     println!("  join:       {base}/");
+    if app.cfg.open_dashboard {
+        println!("  dashboard:  open to everyone on the network, no password (DECKCRAFT_OPEN_DASHBOARD=1)");
+        println!("              {base}/host");
+    }
     if !app.cfg.web_dir.join("index.html").exists() {
         println!("  web editor: not found in {} (build it: cd apps/deckcraft-web && trunk build --release)", app.cfg.web_dir.display());
     }
@@ -289,6 +301,9 @@ fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
 
 /// May this request use the host dashboard and API?
 pub fn is_host(app: &App, addr: &SocketAddr, headers: &HeaderMap) -> bool {
+    if app.cfg.open_dashboard {
+        return true;
+    }
     if app.cfg.trust_loopback && is_loopback(addr, headers) {
         return true;
     }

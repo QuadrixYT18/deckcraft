@@ -105,6 +105,7 @@ upgrades; the apps then connect with `wss://`.
 | `DECKCRAFT_PUBLIC_URL` | – | Address in invitation links (required in production) |
 | `DECKCRAFT_JWT_SECRET` | random key in the data folder | Token signing secret (32+ characters) |
 | `DECKCRAFT_ALLOWED_ORIGINS` | – | Other web origins allowed to call the API |
+| `DECKCRAFT_OPEN_DASHBOARD` | off | `1`: dashboard from every device without a password (development only; anyone on the network can then see codes and remove people) |
 | `DECKCRAFT_TRUST_LOOPBACK` | `1` in development | Open dashboard on `localhost` |
 
 The scripts read these from `server/deckcraft-server.env` (copy the `.example`; never commit it).

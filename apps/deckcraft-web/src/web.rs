@@ -68,6 +68,8 @@ pub fn start() {
                         }
                     } else if live_token.is_some() {
                         // The live session's presentation arrives with the welcome.
+                    } else if crate::live_net::redirect_to_join_page() {
+                        // Served by a DeckCraft server without a session: the join page instead.
                     } else if !query_has("blank") {
                         if let Err(e) = deckcraft_engine::sample::open_sample(&mut app.session) {
                             log::error!("sample deck: {e}");

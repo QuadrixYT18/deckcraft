@@ -31,6 +31,7 @@ button.danger { background:var(--err); }
 table { width:100%; border-collapse:collapse; } td, th { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
 form.inline { display:inline; } .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--dim); margin-right:6px; } .dot.on { background:var(--ok); }
+.qr svg { width: 220px; height: 220px; background: #fff; border-radius: 8px; display: block; margin: 12px 0; }
 .warn { border-left: 4px solid var(--accent); padding-left: 12px; }
 "#;
 
@@ -225,7 +226,8 @@ pub async fn session_page(
          <div class=card><div class=dim>Access code</div><div class=code aria-label='Access code'>{code}</div>\
          <label for=inv>Invitation link (includes the code)</label><input class=copy id=inv type=text readonly value=\"{invite}\">\
          <label for=inv2>Join page (people type the code)</label><input class=copy id=inv2 type=text readonly value=\"{invite_plain}\">\
-         <p class=dim>Select a field and copy it. Anyone with the code can join while the session is open.</p>\
+         <div class=qr aria-label='QR code of the invitation link'>{qr}</div>\
+         <p class=dim>Scan the QR code, or select a field and copy it. Anyone with the code can join while the session is open.</p>\
          <div class=row>{newcode}{joinmode}</div></div>\
          <div class=card><div class=row><a class=button href=\"{editor}\">Open in browser editor</a>\
          <a class='button quiet' href='/host/s/{id}/download/pptx'>Download .pptx</a>\
@@ -245,8 +247,22 @@ pub async fn session_page(
         editor = html(&editor),
         id = html(&info.id),
         n = peers.len(),
+        qr = qr_svg(&invite),
         newcode = action("newcode", "New access code", "quiet", ""),
         delete = action("delete", "Delete session", "quiet", ""),
     );
     Html(page(&info.title, &body)).into_response()
+}
+
+/// The invitation link as an inline SVG QR code (black on white, with its quiet zone).
+fn qr_svg(link: &str) -> String {
+    match qrcode::QrCode::new(link.as_bytes()) {
+        Ok(code) => code
+            .render::<qrcode::render::svg::Color>()
+            .min_dimensions(220, 220)
+            .dark_color(qrcode::render::svg::Color("#000000"))
+            .light_color(qrcode::render::svg::Color("#ffffff"))
+            .build(),
+        Err(_) => String::new(),
+    }
 }
