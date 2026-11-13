@@ -44,15 +44,19 @@ if [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
 fi
 
 # The server program: next to this script (a download), or built from this checkout.
+# The server program: next to this script (a download), or built from this checkout. A checkout
+# is always built: cargo only recompiles what changed, so after `git pull` the server is current.
 bin=""
-for c in "$here/deckcraft-server" "$repo/target/release/deckcraft-server"; do
-  if [[ -x "$c" ]]; then bin="$c"; break; fi
-done
-if [[ -z "$bin" ]]; then
-  command -v cargo >/dev/null || fail "Rust isn't installed. Install it from https://rustup.rs and run this again."
-  say "Building the DeckCraft server (first start only, a few minutes)…"
+if [[ -x "$here/deckcraft-server" ]]; then
+  bin="$here/deckcraft-server"
+elif command -v cargo >/dev/null; then
+  say "Building the DeckCraft server (the first time takes a few minutes)…"
   (cd "$repo" && cargo build --release -p deckcraft-server) || fail "the build failed (see above)"
   bin="$repo/target/release/deckcraft-server"
+elif [[ -x "$repo/target/release/deckcraft-server" ]]; then
+  bin="$repo/target/release/deckcraft-server"
+else
+  fail "Rust isn't installed. Install it from https://rustup.rs and run this again."
 fi
 
 # The browser editor: next to this script (web/), or dist/web in this checkout.
@@ -63,12 +67,18 @@ if [[ -z "${DECKCRAFT_WEB_DIR:-}" ]]; then
     export DECKCRAFT_WEB_DIR="$repo/dist/web"
   fi
 fi
+rev="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
+built="$(cat "$DECKCRAFT_WEB_DIR/.built-rev" 2>/dev/null || true)"
+if [[ "$DECKCRAFT_WEB_DIR" == "$repo/dist/web" && -n "$rev" && "$rev" != "$built" ]] && command -v trunk >/dev/null; then
+  rm -f "$DECKCRAFT_WEB_DIR/index.html"
+fi
 if [[ ! -f "$DECKCRAFT_WEB_DIR/index.html" ]]; then
   if command -v trunk >/dev/null; then
-    say "Building the browser editor (first start only, several minutes)…"
+    say "Building the browser editor (the first time takes several minutes)…"
     fonts="${CRAFT_FONTS_DIR:-$repo/../craft-fonts}"
     [[ -d "$fonts" ]] || say "Note: $fonts not found; the editor is built without the bundled fonts (see README)."
     (cd "$repo/apps/deckcraft-web" && CRAFT_FONTS_DIR="$fonts" trunk build --release) || fail "the browser editor build failed (see above)"
+    [[ -n "$rev" ]] && echo "$rev" >"$DECKCRAFT_WEB_DIR/.built-rev"
   else
     say "Note: the browser editor isn't built, so people can't edit in a browser yet."
     say "      Install trunk (cargo install trunk --locked) and run this again, or see docs/collaboration.md."

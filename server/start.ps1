@@ -29,10 +29,12 @@ if (Test-Path $pidFile) {
   if ($old) { Write-Host "The DeckCraft server is already running. Host dashboard: http://localhost:$port/host"; exit 0 }
 }
 
-$bin = @((Join-Path $here 'deckcraft-server.exe'), (Join-Path $repo 'target\release\deckcraft-server.exe')) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $bin) {
+# A download has the server next to this script; a checkout is always built (cargo only
+# recompiles what changed, so after `git pull` the server is current).
+$bin = Join-Path $here 'deckcraft-server.exe'
+if (-not (Test-Path $bin)) {
   if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Fail 'Rust is not installed. Install it from https://rustup.rs and run this again.' }
-  Write-Host 'Building the DeckCraft server (first start only, a few minutes)...'
+  Write-Host 'Building the DeckCraft server (the first time takes a few minutes)...'
   Push-Location $repo; cargo build --release -p deckcraft-server; $ok = $?; Pop-Location
   if (-not $ok) { Fail 'the build failed (see above)' }
   $bin = Join-Path $repo 'target\release\deckcraft-server.exe'

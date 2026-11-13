@@ -256,7 +256,8 @@ fn handle_http(app: &mut SlideApp, result: Result<(u16, String), String>) {
         (Ok((status, _)), _) => {
             let msg = answer.get("error").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| format!("the server answered {status}"));
             live.status = LiveStatus::Ended(msg.clone());
-            live.error = Some(msg);
+            live.error = Some(msg.clone());
+            app.notify(format!("Live session: {msg}"));
             return;
         }
         (Err(e), _) => {
@@ -357,7 +358,7 @@ fn handle_events(app: &mut SlideApp, events: Vec<Event>) {
                 if let Some(live) = app.live.as_mut() {
                     live.status = LiveStatus::Ended(msg.clone());
                 }
-                app.set_status(format!("Live session: {msg}. Your copy stays open."));
+                app.notify(format!("Live session: {msg}. Your copy stays open."));
             }
         }
     }
@@ -444,6 +445,11 @@ pub fn tick(app: &mut SlideApp, ctx: &egui::Context) {
                     log::info!("live session: connection closed ({why}); retrying in {:?}", live.backoff);
                     live.status = LiveStatus::Reconnecting(Instant::now() + live.backoff);
                     live.backoff = (live.backoff * 2).min(Duration::from_secs(10));
+                    // Before the presentation arrived there is only the start screen: say why.
+                    if live.uid.is_none() {
+                        let server = live.server.clone();
+                        app.notify(format!("Live session: can't connect to {server} yet ({why}). Retrying… Check that this device is on the same network as the host and that the server is running."));
+                    }
                 }
             }
         }

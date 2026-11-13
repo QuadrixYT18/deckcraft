@@ -310,7 +310,13 @@ fn foreign_origin(app: &App, headers: &HeaderMap) -> bool {
     let Some(origin) = headers.get(header::ORIGIN).and_then(|h| h.to_str().ok()) else { return false };
     let host = headers.get(header::HOST).and_then(|h| h.to_str().ok()).unwrap_or("");
     let own = origin.split_once("://").map(|(_, h)| h) == Some(host);
-    !own && !app.cfg.allowed_origins.iter().any(|o| o == origin) && app.cfg.public_url.as_deref().map(|u| u.trim_end_matches('/')) != Some(origin)
+    let refused = !own
+        && !app.cfg.allowed_origins.iter().any(|o| o == origin)
+        && app.cfg.public_url.as_deref().map(|u| u.trim_end_matches('/')) != Some(origin);
+    if refused {
+        eprintln!("deckcraft-server: refused a request from origin {origin:?} to host {host:?} (DECKCRAFT_ALLOWED_ORIGINS allows more)");
+    }
+    refused
 }
 
 pub fn error_page(status: StatusCode, title: &str, msg: &str) -> Response {
