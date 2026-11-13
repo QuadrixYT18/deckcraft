@@ -125,5 +125,6 @@ say "  Stop:  stop.command"
 if [[ "$(uname -s)" == "Darwin" ]]; then
   say ""
   say "If macOS asks whether deckcraft-server may accept incoming connections, choose Allow."
-  open "http://localhost:$port/host" >/dev/null 2>&1 || true
+  # DECKCRAFT_NO_BROWSER=1: the host works in the DeckCraft app (Review › Live Session) instead.
+  [[ -n "${DECKCRAFT_NO_BROWSER:-}" ]] || open "http://localhost:$port/host" >/dev/null 2>&1 || true
 fi
