@@ -28,6 +28,19 @@ pub fn start() {
         // opens presentations in it and stores what it saves (`host`); `data-host="page"` on the
         // canvas opts a page in that runs DeckCraft in its own document. The presenter popup is
         // never the framed page.
+        // An audience window that lost the editor that opened it (it was reloaded, or the editor
+        // tab closed or reloaded): open the editor here instead of failing. The tab's copy of
+        // the live-session token joins the session again.
+        if crate::presenter::token().is_some()
+            && let Some(window) = web_sys::window()
+            && window.opener().map_or(true, |o| o.is_null() || o.is_undefined())
+        {
+            let path = window.location().pathname().unwrap_or_else(|_| "/".into());
+            let search = window.location().search().unwrap_or_default();
+            if window.location().replace(&format!("{path}{search}")).is_ok() {
+                return;
+            }
+        }
         let hosted = crate::presenter::token().is_none();
         let bridge = if hosted { crate::host::Bridge::detect(&canvas) } else { None };
         if hosted && bridge.is_none() && query_param("host").as_deref() == Some("parent") {
