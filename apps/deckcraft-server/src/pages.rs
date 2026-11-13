@@ -230,7 +230,11 @@ pub async fn session_page(
          <div class=card><div class=row><a class=button href=\"{editor}\">Open in browser editor</a>\
          <a class='button quiet' href='/host/s/{id}/download/pptx'>Download .pptx</a>\
          <a class='button quiet' href='/host/s/{id}/download/deckcraft'>Download .deckcraft</a></div>\
-         <p>{sync}</p></div>\
+         <p>{sync}</p>\
+         <form method=post action='/host/s/{id}/replace' enctype=multipart/form-data><input type=hidden name=csrf value=\"{csrf}\">\
+         <label for=rep>Replace the shared presentation with a file (.pptx or .deckcraft)</label>\
+         <input type=file id=rep name=file accept='.pptx,.deckcraft' required>\
+         <p><button class=quiet type=submit>Replace presentation for everyone</button></p></form></div>\
          <h2>People ({n})</h2><div class=card><table><tr><th>Name</th><th>Role</th><th>Where</th><th></th></tr>{people}</table>\
          <p class=dim><a href='?live=1'>Refresh automatically</a> · <a href='?'>Stop refreshing</a></p></div>\
          <div class=row>{lifecycle}{delete}</div>",

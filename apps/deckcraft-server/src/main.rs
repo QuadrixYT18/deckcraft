@@ -258,6 +258,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/host/create", post(create_form).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)))
         .route("/host/s/{id}", get(pages::session_page))
         .route("/host/s/{id}/action", post(session_action))
+        .route("/host/s/{id}/replace", post(replace_form).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)))
         .route("/host/s/{id}/download/{file}", get(download))
         .route("/api/join", post(api_join))
         .route("/api/sessions", post(api_create).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)))
@@ -414,7 +415,8 @@ async fn api_join(
 }
 
 /// Make a session from an uploaded presentation (or a new one) with its host.
-async fn create_session(app: &App, title: &str, host_name: &str, bytes: &[u8]) -> Result<(Arc<Session>, String), String> {
+/// A presentation from uploaded bytes: .pptx or .deckcraft, or a new one when there are none.
+fn load_presentation(bytes: &[u8]) -> Result<deckcraft_model::Presentation, String> {
     let doc = if bytes.is_empty() {
         let mut p = deckcraft_model::defaults::new_presentation(None);
         let layout = deckcraft_model::defaults::layout_of_kind(&p, deckcraft_model::LayoutType::Title)
@@ -434,6 +436,11 @@ async fn create_session(app: &App, title: &str, host_name: &str, bytes: &[u8]) -
     } else {
         return Err("upload a .pptx or .deckcraft file (or nothing for a new presentation)".into());
     };
+    Ok(doc)
+}
+
+async fn create_session(app: &App, title: &str, host_name: &str, bytes: &[u8]) -> Result<(Arc<Session>, String), String> {
+    let doc = load_presentation(bytes)?;
     let shared = Shared::from_presentation(&doc).map_err(|e| e.to_string())?;
     let id = auth::random_id();
     let host_pid = auth::random_id();
@@ -537,6 +544,81 @@ async fn create_form(State(app): AppState, ConnectInfo(addr): ConnectInfo<Socket
             Redirect::to(&format!("/host/s/{id}")).into_response()
         }
         Err(e) => error_page(StatusCode::BAD_REQUEST, "Couldn't create the session", &e),
+    }
+}
+
+/// Read a dashboard upload form: the CSRF value and the file's bytes.
+async fn read_upload(mut form: Multipart) -> Result<(BTreeMap<String, String>, Vec<u8>), String> {
+    let (mut fields, mut bytes) = (BTreeMap::new(), Vec::new());
+    while let Some(field) = form.next_field().await.map_err(|e| e.to_string())? {
+        let name = field.name().unwrap_or("").to_string();
+        let data = field.bytes().await.map_err(|e| e.to_string())?;
+        if name == "file" {
+            bytes = data.to_vec();
+        } else {
+            fields.insert(name, String::from_utf8_lossy(&data).into_owned());
+        }
+    }
+    Ok((fields, bytes))
+}
+
+/// The host replaces the shared presentation with an uploaded file: one operation, so every
+/// connected person sees it at once and it is saved like any other change.
+async fn replace_form(
+    State(app): AppState,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    form: Multipart,
+) -> Response {
+    if !is_host(&app, &addr, &headers) {
+        return Redirect::to("/host/login").into_response();
+    }
+    let (fields, bytes) = match read_upload(form).await {
+        Ok(f) => f,
+        Err(e) => return error_page(StatusCode::BAD_REQUEST, "Upload failed", &e),
+    };
+    if !fields.get("csrf").is_some_and(|c| auth::same(c, &app.csrf())) {
+        return error_page(StatusCode::FORBIDDEN, "Not allowed", "The form expired. Reload the dashboard and try again.");
+    }
+    if bytes.is_empty() {
+        return error_page(StatusCode::BAD_REQUEST, "No file", "Choose a .pptx or .deckcraft file first.");
+    }
+    let Some(session) = app.session(&id).await else {
+        return error_page(StatusCode::NOT_FOUND, "No such session", "");
+    };
+    let doc = match load_presentation(&bytes) {
+        Ok(d) => d,
+        Err(e) => return error_page(StatusCode::BAD_REQUEST, "Couldn't open the file", &e),
+    };
+    let result = {
+        let mut shared = session.shared.lock().await;
+        let entries = shared
+            .materialize()
+            .map_err(|e| e.to_string())
+            .and_then(|cur| deckcraft_collab::patch::diff(Some(&cur), &doc).to_entries().map_err(|e| e.to_string()));
+        match entries {
+            Ok(entries) => {
+                let op = shared.applied_op("dashboard").saturating_add(1);
+                match shared.apply_op("dashboard", op, &entries) {
+                    Ok(seq) => {
+                        let msg = deckcraft_collab::proto::ServerMsg::Op { seq, from: "dashboard".into(), entries }.to_json();
+                        for c in session.conns.lock().await.values() {
+                            let _ = c.tx.send(msg.clone());
+                        }
+                        session.dirty.store(true, std::sync::atomic::Ordering::Release);
+                        session.backup_due.store(true, std::sync::atomic::Ordering::Release);
+                        Ok(())
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
+            }
+            Err(e) => Err(e),
+        }
+    };
+    match result {
+        Ok(()) => Redirect::to(&format!("/host/s/{id}")).into_response(),
+        Err(e) => error_page(StatusCode::INTERNAL_SERVER_ERROR, "Couldn't replace the presentation", &e),
     }
 }
 
