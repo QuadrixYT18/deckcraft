@@ -59,11 +59,15 @@ pub fn start() {
                         bridge.connect(&mut services, cc.egui_ctx.clone());
                     }
                     let mut app = SlideApp::new(Session::new(), services);
+                    // Arrived from the server's join page (`#token=`): only the shared presentation opens.
+                    let live_token = crate::live_net::token_from_fragment();
                     // In host mode the parent sends the presentation to edit; no sample meanwhile.
                     if app_bridge.is_some() {
                         if let Err(e) = app.start_for_host() {
                             log::error!("new presentation: {e}");
                         }
+                    } else if live_token.is_some() {
+                        // The live session's presentation arrives with the welcome.
                     } else if !query_has("blank") {
                         if let Err(e) = deckcraft_engine::sample::open_sample(&mut app.session) {
                             log::error!("sample deck: {e}");
@@ -80,9 +84,7 @@ pub fn start() {
                         crate::host::Bridge::set_author(&mut app, &author);
                     }
                     // Arrived from the server's join page: join that live session.
-                    if let (Some(token), Some(origin)) =
-                        (crate::live_net::token_from_fragment(), web_sys::window().and_then(|w| w.location().origin().ok()))
-                    {
+                    if let (Some(token), Some(origin)) = (live_token, web_sys::window().and_then(|w| w.location().origin().ok())) {
                         deckcraft_ui_egui::live::join_with_token(&mut app, &origin, &token);
                     }
                     crate::api::install(&mut app, cc.egui_ctx.clone());

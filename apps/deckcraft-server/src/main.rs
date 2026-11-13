@@ -523,10 +523,19 @@ async fn create_form(State(app): AppState, ConnectInfo(addr): ConnectInfo<Socket
             Err(e) => return error_page(StatusCode::BAD_REQUEST, "Upload failed", &e.to_string()),
         };
         let name = field.name().unwrap_or("").to_string();
+        let picked = field.file_name().is_some_and(|n| !n.is_empty());
         let data = match field.bytes().await {
             Ok(d) => d,
             Err(e) => return error_page(StatusCode::BAD_REQUEST, "Upload failed", &e.to_string()),
         };
+        // A file was chosen but no bytes came: never fall back to a new, empty presentation.
+        if name == "file" && picked && data.is_empty() {
+            return error_page(
+                StatusCode::BAD_REQUEST,
+                "The file arrived empty",
+                "The browser sent the chosen file without its contents. If it is stored in iCloud, download it to the Mac first (Finder › Download Now), then try again.",
+            );
+        }
         match name.as_str() {
             "title" => title = String::from_utf8_lossy(&data).into_owned(),
             "host" => host = String::from_utf8_lossy(&data).into_owned(),
