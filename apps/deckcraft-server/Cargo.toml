@@ -1,0 +1,33 @@
+[package]
+name = "deckcraft-server"
+description = "DeckCraft live sessions: the collaboration server, host dashboard and web editor host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "deckcraft-server"
+path = "src/main.rs"
+
+[dependencies]
+deckcraft-collab = { path = "../../crates/collab" }
+deckcraft-model = { workspace = true }
+deckcraft-format = { workspace = true }
+deckcraft-pptx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true, features = ["clock"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "fs"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws", "form", "query", "json", "multipart"] }
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.3"
+
+[dev-dependencies]
+tungstenite = "0.27"
+ureq = { version = "3", default-features = false, features = ["json"] }
