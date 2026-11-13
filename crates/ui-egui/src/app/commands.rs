@@ -226,6 +226,20 @@ impl SlideApp {
                 return Ok(json!({"printed": self.print_pdf(p.clone())}));
             }
             "app.about" => self.dialog = Some(dialogs::Dialog::new("about")),
+            "live.dialog" => self.dialog = Some(dialogs::Dialog::new("live")),
+            "live.start" | "live.join" => {
+                let server = p.get("server").and_then(Value::as_str).ok_or("missing `server`")?;
+                let name = p.get("name").and_then(Value::as_str).unwrap_or(self.session.prefs.author.as_str()).to_string();
+                if id == "live.start" {
+                    crate::live::start(self, server, &name)?;
+                } else {
+                    let code = p.get("code").and_then(Value::as_str).ok_or("missing `code`")?;
+                    crate::live::join(self, server, &name, code)?;
+                }
+                return Ok(json!({"started": true}));
+            }
+            "live.leave" => crate::live::leave(self),
+            "live.status" => return Ok(crate::live::status_json(self)),
             "app.checkUpdates" => {
                 #[cfg(not(target_arch = "wasm32"))]
                 updates_ui::request_check(self);

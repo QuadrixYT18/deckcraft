@@ -33,6 +33,7 @@ pub(super) fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
         "quit" => dlg_quit(app, ui, d),
         "close" => dlg_close(app, ui, d),
         "zoom" => zoom_dialog(app, ui, d),
+        "live" => crate::live::dialog(app, ui, d),
         "comment" => dlg_comment(app, ui, d),
         "bullets" => dlg_bullets(app, ui, d),
         "action" => dlg_action(app, ui, d),

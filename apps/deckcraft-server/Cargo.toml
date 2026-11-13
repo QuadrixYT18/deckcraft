@@ -14,7 +14,7 @@ name = "deckcraft-server"
 path = "src/main.rs"
 
 [dependencies]
-deckcraft-collab = { path = "../../crates/collab" }
+deckcraft-collab = { workspace = true }
 deckcraft-model = { workspace = true }
 deckcraft-format = { workspace = true }
 deckcraft-pptx = { workspace = true }

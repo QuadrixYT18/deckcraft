@@ -154,6 +154,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-11-13 | Live sessions: several people edit one presentation at once in the desktop app and the browser (Review › Live Session). New `deckcraft-collab` (keyed patches, convergent last-writer-wins per shape, per-connection id blocks, reconnect), `Session::apply_remote` (undo stays the user's own), and `deckcraft-server` (host dashboard with the access code, join page, tokens, rate limits, atomic saves and backups, .pptx download), with start scripts and a container; see docs/collaboration.md |
 | 2026-11-11 | Media: the Opus decoder and the Ogg, MP4/MOV and Matroska demuxers are craft-audio and craft-media from craft-libs; DeckCraft's own copies and re-export crates are removed |
 | 2026-11-04 | Ogg Opus recovery keeps trailing packets without granules in the total duration, matching their recovered positions; valid end trimming stays covered |
 | 2026-11-03 | Web: the `?host=parent` bridge (as in GridCraft, WordCraft and PdfCraft) lets a same-origin page that frames DeckCraft send a presentation and store its saves; Save writes an opened .pptx back as .pptx under its own name, as on the desktop |

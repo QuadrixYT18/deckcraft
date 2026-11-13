@@ -22,6 +22,7 @@ mod control_server;
 mod display;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
+mod live_net;
 mod logging;
 #[cfg(not(target_arch = "wasm32"))]
 mod pasteboard;
@@ -142,6 +143,7 @@ fn services(native_wayland: bool) -> Services {
         audio_out: std::env::var_os("DECKCRAFT_NO_AUDIO")
             .is_none()
             .then(|| Box::new(audio::CpalOut::default()) as Box<dyn deckcraft_media::AudioOut>),
+        live_net: Some(Box::new(live_net::NativeNet::new(None))),
         ..Default::default()
     }
 }

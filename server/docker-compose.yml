@@ -1,0 +1,22 @@
+# DeckCraft live sessions with Docker Compose.
+#
+#   cp server/deckcraft-server.env.example server/deckcraft-server.env   # set DECKCRAFT_ADMIN_PASSWORD
+#   docker compose -f server/docker-compose.yml up -d --build
+#
+# For use beyond a trusted local network, put a TLS proxy (Caddy, nginx, Traefik) in front, set
+# DECKCRAFT_MODE=production and DECKCRAFT_PUBLIC_URL=https://…; see docs/collaboration.md.
+services:
+  deckcraft:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: deckcraft-server.env
+        required: false
+    volumes:
+      - deckcraft-data:/data
+    restart: unless-stopped
+volumes:
+  deckcraft-data:

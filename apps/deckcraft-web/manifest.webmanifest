@@ -1,0 +1,14 @@
+{
+  "name": "DeckCraft",
+  "short_name": "DeckCraft",
+  "description": "Presentations: create, edit and present, alone or together in a live session.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#262626",
+  "theme_color": "#262626",
+  "icons": [
+    { "src": "ai.storyteller.deckcraft.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

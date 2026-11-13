@@ -37,7 +37,7 @@ form.inline { display:inline; } .row { display:flex; flex-wrap:wrap; gap:8px; al
 pub fn page(title: &str, body: &str) -> String {
     format!(
         "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width, initial-scale=1'>\
-         <meta name=referrer content=no-referrer><title>{} · DeckCraft</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>",
+         <meta name=referrer content=same-origin><title>{} · DeckCraft</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>",
         html(title)
     )
 }
@@ -99,7 +99,7 @@ pub async fn dashboard(State(app): State<Arc<App>>, ConnectInfo(addr): ConnectIn
         let online = s.conns.lock().await.len();
         list.push((info, online));
     }
-    list.sort_by(|a, b| b.0.created.cmp(&a.0.created));
+    list.sort_by_key(|e| std::cmp::Reverse(e.0.created));
     for (info, online) in &list {
         rows.push_str(&format!(
             "<tr><td><a href='/host/s/{}'>{}</a></td><td>{}</td><td>{}</td><td>{}</td></tr>",

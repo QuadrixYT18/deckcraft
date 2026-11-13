@@ -232,7 +232,7 @@ async fn saver(app: Arc<App>) {
             if let Err(e) = s.save_shared().await {
                 eprintln!("deckcraft-server: saving {} failed: {e}", s.dir.display());
             }
-            if n % 300 == 0
+            if n.is_multiple_of(300)
                 && let Err(e) = s.backup().await
             {
                 eprintln!("deckcraft-server: backup of {} failed: {e}", s.dir.display());

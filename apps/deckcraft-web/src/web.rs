@@ -79,6 +79,12 @@ pub fn start() {
                     {
                         crate::host::Bridge::set_author(&mut app, &author);
                     }
+                    // Arrived from the server's join page: join that live session.
+                    if let (Some(token), Some(origin)) =
+                        (crate::live_net::token_from_fragment(), web_sys::window().and_then(|w| w.location().origin().ok()))
+                    {
+                        deckcraft_ui_egui::live::join_with_token(&mut app, &origin, &token);
+                    }
                     crate::api::install(&mut app, cc.egui_ctx.clone());
                     Ok(Box::new(WebShell { app, inbox, bridge: app_bridge }))
                 }),
@@ -186,6 +192,7 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
     };
     Services {
         presenter,
+        live_net: Some(Box::new(crate::live_net::WebNet::new(ctx.clone()))),
         open_async: Some(Box::new(move |purpose: &str, request: u64| {
             let inbox = open_inbox.clone();
             let ctx = ctx.clone();

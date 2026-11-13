@@ -32,6 +32,10 @@ rfd = { workspace = true }
 arboard = { workspace = true, features = ["image-data"] }
 image = { workspace = true }
 cpal = "0.16"
+# Live sessions (Review › Live Session): the WebSocket and the server's join/create API.
+deckcraft-collab = { workspace = true }
+tungstenite = { version = "0.27", features = ["rustls-tls-webpki-roots"] }
+ureq = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Finder double-click, Open With, Dock drops and `open -a DeckCraft deck.pptx` arrive as a
