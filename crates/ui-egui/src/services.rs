@@ -73,4 +73,6 @@ pub struct Services {
     pub audio_out: Option<Box<dyn deckcraft_media::AudioOut>>,
     /// How many displays are connected, when the host can tell: Presenter View needs a second.
     pub displays: Option<Box<dyn FnMut() -> Option<usize>>>,
+    /// The network for live sessions (Review › Live Session); `None` hides the feature.
+    pub live_net: Option<Box<dyn crate::live::LiveNet>>,
 }

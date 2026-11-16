@@ -43,6 +43,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("text", Class::Layer(2)),
     ("anim", Class::Layer(2)),
     ("format", Class::Layer(2)),
+    // Live collaboration: the document patches clients and the server exchange (model only).
+    ("collab", Class::Layer(2)),
     ("render", Class::Layer(3)),
     ("pptx", Class::Layer(3)),
     ("pdf", Class::Layer(4)),
@@ -54,6 +56,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("deckcraft", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
+    ("server", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
 

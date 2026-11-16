@@ -23,6 +23,7 @@ pub mod dialogs;
 pub mod doc_window;
 pub mod eyedropper;
 pub mod icons;
+pub mod live;
 pub mod media;
 pub mod menus;
 pub mod opening;
@@ -140,6 +141,11 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.checkUpdates", "Check for Updates…", None, "{}"),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
+    ("live.dialog", "Live Session…", None, "{}"),
+    ("live.start", "Start Live Session", None, "{server: url, name?: string} — share the open presentation; the answer comes later, see live.status"),
+    ("live.join", "Join Live Session", None, "{server: url, name: string, code: string}"),
+    ("live.leave", "Leave Live Session", None, "{}"),
+    ("live.status", "Live Session Status", None, "{} → {status, code?, invite?, role?, people: [{name, role, online}], unconfirmed}"),
     ("app.preferences", "Preferences…", Some("Cmd+,"), "{}"),
     ("app.openDialog", "Open…", None, "{purpose?}"),
     ("app.insertPictureDialog", "Picture from File…", None, "{}"),
@@ -229,6 +235,8 @@ pub struct SlideApp {
     /// Spelling squiggles, checked on a worker thread.
     pub squiggles: squiggles::Squiggles,
     pub dialog: Option<dialogs::Dialog>,
+    /// A live session (Review › Live Session): other people editing the same presentation.
+    pub live: Option<live::Live>,
     /// The word looked up in the Thesaurus pane.
     pub thesaurus_query: String,
     pub show: Option<show::Show>,
@@ -464,6 +472,8 @@ mod huge_deck_tests;
 mod ime_tests;
 #[cfg(test)]
 mod last_color_tests;
+#[cfg(test)]
+mod live_tests;
 #[cfg(test)]
 mod presenter_tests;
 #[cfg(test)]

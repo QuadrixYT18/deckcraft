@@ -27,6 +27,9 @@ const PICTURE_IDEAS: [Idea; 4] = [
     ("pictureRight", "Picture right, text left"),
     ("framed", "Framed picture beside the title"),
 ];
+/// Colour ideas: any slide with text. They set the slide's background and the colour of its text.
+const COLOR_IDEAS: [Idea; 3] =
+    [("colorDark", "Dark background, light text"), ("colorLight", "Light background, dark text"), ("colorAccent", "Accent colour background")];
 const TEXT_IDEAS: [Idea; 3] =
     [("titleColumn", "Title column beside the text"), ("centred", "Centred title over the text"), ("titleBottom", "Text above, title at the foot")];
 
@@ -85,11 +88,17 @@ fn arrangeable(ctx: Option<&Ctx>, s: &Shape) -> bool {
     }
 }
 
-/// The ideas for slide `index` (none when it has nothing to arrange, or other content in the way).
-pub fn ideas_for(doc: &Presentation, index: usize) -> Vec<Idea> {
+/// A filled or outlined shape without text (a band, a frame, a backdrop): decoration that a
+/// layout idea may move along with the title, not something that rules the idea out.
+fn decoration(s: &Shape) -> bool {
+    matches!(s.kind, ShapeKind::Shape) && s.ph.is_none() && !s.text_box && s.text.as_ref().is_none_or(|t| t.text().trim().is_empty())
+}
+
+/// The layout ideas for slide `index` (none when it has nothing to arrange, or other content in the way).
+fn layout_ideas(doc: &Presentation, index: usize) -> Vec<Idea> {
     let Some(slide) = doc.slides.get(index) else { return vec![] };
     let ctx = Ctx::for_slide(doc, slide);
-    if slide.shapes.iter().any(|s| !s.hidden && !arrangeable(ctx.as_ref(), s)) {
+    if slide.shapes.iter().any(|s| !s.hidden && !arrangeable(ctx.as_ref(), s) && !decoration(s)) {
         return vec![];
     }
     // The ideas move one picture; a second would stay put, over the rearranged text.
@@ -104,6 +113,55 @@ pub fn ideas_for(doc: &Presentation, index: usize) -> Vec<Idea> {
     } else {
         vec![]
     }
+}
+
+/// The ideas for slide `index`: layouts where its content allows, colours wherever it has text.
+pub fn ideas_for(doc: &Presentation, index: usize) -> Vec<Idea> {
+    let Some(slide) = doc.slides.get(index) else { return vec![] };
+    let mut ideas = layout_ideas(doc, index);
+    let mut has_text = false;
+    deckcraft_model::walk(&slide.shapes, &mut |sh, _| has_text |= sh.text.as_ref().is_some_and(|t| !t.text().trim().is_empty()));
+    if has_text {
+        ideas.extend(COLOR_IDEAS);
+    }
+    ideas
+}
+
+/// Colour idea `id`: the slide's background, and every run of text in the colour that reads on it.
+/// Text on a picture or on a filled shape keeps its colour (it was chosen for what is behind it).
+fn apply_colors(doc: &mut Presentation, index: usize, id: &str) -> Result<()> {
+    use deckcraft_model::{Background, ColorRef};
+    let white = ColorRef::rgb(Rgba::rgb(255, 255, 255));
+    let (bg, fg) = match id {
+        "colorDark" => (ColorRef::rgb(Rgba::rgb(30, 34, 40)), white),
+        "colorLight" => (white, ColorRef::rgb(Rgba::rgb(33, 33, 33))),
+        "colorAccent" => (ColorRef::scheme(deckcraft_color::SchemeSlot::Accent1), white),
+        _ => return Err(bad("design.applyIdea", format!("no idea `{id}`"))),
+    };
+    let slide = doc.slides.get_mut(index).ok_or_else(|| bad("design.applyIdea", "no slide"))?;
+    let slide = std::sync::Arc::make_mut(slide);
+    slide.background = Some(Background::Fill { fill: Fill::solid(bg) });
+    fn recolor(shapes: &mut [Shape], fg: &ColorRef) {
+        for sh in shapes {
+            if let Some(kids) = sh.children_mut() {
+                recolor(kids, fg);
+                continue;
+            }
+            // A filled shape keeps its own text colour; so does text on a picture.
+            if sh.fill.as_ref().is_some_and(|f| !f.is_none()) || matches!(sh.kind, ShapeKind::Picture { .. }) {
+                continue;
+            }
+            if let Some(body) = sh.text.as_mut() {
+                for p in &mut body.paragraphs {
+                    for r in &mut p.runs {
+                        r.props.fill = Some(Fill::solid(fg.clone()));
+                    }
+                }
+            }
+        }
+    }
+    recolor(&mut slide.shapes, &fg);
+    Ok(())
 }
 
 /// Crop a picture whose source has aspect `src` (w/h) to fill a box of aspect `dst`, centred.
@@ -140,6 +198,9 @@ fn is_band(f: &Fill) -> bool {
 pub fn apply_idea(doc: &mut Presentation, sel: &Selection, index: usize, id: &str) -> Result<()> {
     if !ideas_for(doc, index).iter().any(|i| i.0 == id) {
         return Err(bad("design.applyIdea", format!("no idea `{id}` for this slide (see design.ideas)")));
+    }
+    if id.starts_with("color") {
+        return apply_colors(doc, index, id);
     }
     let (sw, sh) = (doc.slide_size.width.max(1.0), doc.slide_size.height.max(1.0));
     let sel = Selection { slide: index, ..sel.clone() };
@@ -212,6 +273,29 @@ pub fn apply_idea(doc: &mut Presentation, sel: &Selection, index: usize, id: &st
         }
         _ => return Err(bad("design.applyIdea", format!("no idea `{id}`"))),
     }
+    // A decoration behind the title (a band, a box) moves with it, a little larger than the title;
+    // it then replaces the full-bleed band.
+    let mut backdrop = false;
+    if let (Some(t), Some(new_t)) = (r.title, place.iter().find(|(i, _)| Some(*i) == r.title).map(|(_, x)| *x))
+        && let Some(old_t) = boxes.get(t)
+    {
+        let (cx, cy) = (old_t.x + old_t.w / 2.0, old_t.y + old_t.h / 2.0);
+        for (i, s) in shapes.iter().enumerate() {
+            let Some(b) = boxes.get(i) else { continue };
+            if !s.hidden && decoration(s) && b.x <= cx && cx <= b.x + b.w && b.y <= cy && cy <= b.y + b.h {
+                let pad = m * 0.3;
+                let x0 = (new_t.x - pad).max(0.0);
+                let y0 = (new_t.y - pad).max(0.0);
+                let x1 = (new_t.x + new_t.w + pad).min(sw);
+                let y1 = (new_t.y + new_t.h + pad).min(sh);
+                place.push((i, Xfrm::new(x0, y0, (x1 - x0).max(1.0), (y1 - y0).max(1.0))));
+                backdrop = true;
+            }
+        }
+    }
+    if backdrop {
+        band = false;
+    }
     let slide = doc.slides.get_mut(index).ok_or_else(|| bad("design.applyIdea", "no slide"))?;
     let slide = std::sync::Arc::make_mut(slide);
     for (i, x) in place {
@@ -225,12 +309,21 @@ pub fn apply_idea(doc: &mut Presentation, sel: &Selection, index: usize, id: &st
         }
         s.xfrm = Some(Xfrm { rot: 0.0, ..x });
     }
-    // The picture goes to the back, so text over it stays readable.
+    // The picture goes to the back, so text over it stays readable; decoration right above it,
+    // so it never covers the rearranged text.
+    let decor_ids: Vec<_> = slide.shapes.iter().filter(|s| !s.hidden && decoration(s)).map(|s| s.id).collect();
     if let Some(p) = r.picture
         && p < slide.shapes.len()
     {
         let pic = slide.shapes.remove(p);
         slide.shapes.insert(0, pic);
+    }
+    let first = usize::from(r.picture.is_some());
+    for (k, id) in decor_ids.iter().enumerate() {
+        if let Some(i) = slide.shapes.iter().position(|s| s.id == *id) {
+            let d = slide.shapes.remove(i);
+            slide.shapes.insert((first + k).min(slide.shapes.len()), d);
+        }
     }
     if let Some(t) = slide.shapes.iter_mut().find(|s| !s.hidden && s.ph.as_ref().is_some_and(|p| p.kind.is_title())) {
         if band {
@@ -317,9 +410,9 @@ mod tests {
     fn picture_slides_get_layout_ideas_and_text_slides_get_text_ideas() {
         let s = deck(true);
         let ids: Vec<&str> = ideas_for(&s.doc().unwrap().doc, 0).iter().map(|i| i.0).collect();
-        assert_eq!(ids, ["fullBleed", "pictureLeft", "pictureRight", "framed"]);
+        assert_eq!(ids, ["fullBleed", "pictureLeft", "pictureRight", "framed", "colorDark", "colorLight", "colorAccent"]);
         let s = deck(false);
-        assert_eq!(ideas_for(&s.doc().unwrap().doc, 0).len(), 3);
+        assert_eq!(ideas_for(&s.doc().unwrap().doc, 0).len(), 6);
         assert!(ideas_for(&s.doc().unwrap().doc, 9).is_empty());
     }
 
@@ -383,6 +476,47 @@ mod tests {
         assert!(Arc::ptr_eq(&before, &s.doc().unwrap().doc) || *before == *s.doc().unwrap().doc);
         assert!(s.execute("design.applyIdea", &json!({"id": "centred", "slide": 0})).is_ok());
         assert!(s.execute("design.ideas", &json!({})).is_ok());
+    }
+
+    /// A slide as PowerPoint decks often have it: a photo, a coloured band behind the title.
+    fn deck_with_band() -> Session {
+        let mut s = deck(true);
+        let st = s.doc_mut().unwrap();
+        let slide = Arc::make_mut(&mut Arc::make_mut(&mut st.doc).slides[0]);
+        let band = Shape {
+            id: ShapeId(503),
+            fill: Some(Fill::solid(deckcraft_model::ColorRef::rgb(Rgba::rgb(200, 20, 20)))),
+            xfrm: Some(Xfrm::new(0.0, 20.0, 960.0, 110.0)),
+            ..Default::default()
+        };
+        slide.shapes.insert(1, band);
+        s
+    }
+
+    #[test]
+    fn a_band_behind_the_title_moves_with_it() {
+        let s = deck_with_band();
+        let ids: Vec<&str> = ideas_for(&s.doc().unwrap().doc, 0).iter().map(|i| i.0).collect();
+        assert!(ids.contains(&"pictureLeft"), "a decorated slide still gets layout ideas: {ids:?}");
+        for id in ["fullBleed", "pictureLeft", "pictureRight", "framed"] {
+            let mut s = deck_with_band();
+            s.execute("design.applyIdea", &json!({"id": id})).unwrap();
+            let (t, b) = (shape(&s, 500).xfrm.unwrap(), shape(&s, 503).xfrm.unwrap());
+            assert!(b.x <= t.x && b.y <= t.y && b.x + b.w >= t.x + t.w - 0.01 && b.y + b.h >= t.y + t.h - 0.01, "{id}: band {b:?} title {t:?}");
+            assert!(shape(&s, 500).fill.as_ref().is_none_or(|f| !is_band(f)), "{id}: the slide's own band replaces the white one");
+        }
+    }
+
+    #[test]
+    fn colour_ideas_change_background_and_text_but_not_text_on_filled_shapes() {
+        let mut s = deck_with_band();
+        s.execute("design.applyIdea", &json!({"id": "colorDark"})).unwrap();
+        let slide = s.doc().unwrap().doc.slides[0].clone();
+        assert!(slide.background.is_some());
+        let body = shape(&s, 501);
+        assert!(body.text.unwrap().paragraphs[0].runs[0].props.fill.is_some(), "text on the slide is recoloured");
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert!(s.doc().unwrap().doc.slides[0].background.is_none());
     }
 
     #[test]
@@ -476,7 +610,7 @@ mod tests {
             text: Some(deckcraft_model::text::TextBody::from_text("Solar wind")),
             ..Default::default()
         });
-        assert!(ideas_for(&s.doc().unwrap().doc, 0).is_empty());
+        assert!(layout_ideas(&s.doc().unwrap().doc, 0).is_empty());
         assert!(s.execute("design.applyIdea", &json!({"id": "titleColumn"})).is_err());
         // A connector too, and a hidden one does not count.
         let mut s = deck(false);
@@ -487,9 +621,9 @@ mod tests {
             xfrm: Some(Xfrm::new(300.0, 200.0, 100.0, 0.0)),
             ..Default::default()
         });
-        assert!(ideas_for(&s.doc().unwrap().doc, 0).is_empty());
+        assert!(layout_ideas(&s.doc().unwrap().doc, 0).is_empty());
         Arc::make_mut(&mut Arc::make_mut(&mut s.doc_mut().unwrap().doc).slides[0]).shapes[2].hidden = true;
-        assert_eq!(ideas_for(&s.doc().unwrap().doc, 0).len(), 3);
+        assert_eq!(layout_ideas(&s.doc().unwrap().doc, 0).len(), 3);
     }
 
     #[test]
@@ -502,10 +636,10 @@ mod tests {
             xfrm: Some(Xfrm::new(600.0, 300.0, 200.0, 100.0)),
             ..Default::default()
         });
-        assert!(ideas_for(&s.doc().unwrap().doc, 0).is_empty());
+        assert!(layout_ideas(&s.doc().unwrap().doc, 0).is_empty());
         assert!(s.execute("design.applyIdea", &json!({"id": "pictureLeft"})).is_err());
         Arc::make_mut(&mut Arc::make_mut(&mut s.doc_mut().unwrap().doc).slides[0]).shapes[3].hidden = true;
-        assert_eq!(ideas_for(&s.doc().unwrap().doc, 0).len(), 4);
+        assert_eq!(layout_ideas(&s.doc().unwrap().doc, 0).len(), 4);
     }
 
     #[test]
@@ -513,10 +647,10 @@ mod tests {
         let mut s = deck(false);
         let slide = Arc::make_mut(&mut Arc::make_mut(&mut s.doc_mut().unwrap().doc).slides[0]);
         slide.shapes.push(Shape { id: ShapeId(512), text_box: true, xfrm: Some(Xfrm::new(10.0, 10.0, 100.0, 40.0)), ..Default::default() });
-        assert_eq!(ideas_for(&s.doc().unwrap().doc, 0).len(), 3, "invisible and empty: nothing in the way");
+        assert_eq!(layout_ideas(&s.doc().unwrap().doc, 0).len(), 3, "invisible and empty: nothing in the way");
         let slide = Arc::make_mut(&mut Arc::make_mut(&mut s.doc_mut().unwrap().doc).slides[0]);
         slide.shapes[2].fill = Some(Fill::solid(deckcraft_model::ColorRef::rgb(Rgba::rgba(200, 80, 20, 255))));
-        assert!(ideas_for(&s.doc().unwrap().doc, 0).is_empty(), "a filled empty box would stay on top");
+        assert!(layout_ideas(&s.doc().unwrap().doc, 0).is_empty(), "a filled empty box would stay on top");
     }
 
     #[test]
@@ -530,7 +664,7 @@ mod tests {
             fill: Some(Fill::None),
             ..Default::default()
         });
-        assert_eq!(ideas_for(&s.doc().unwrap().doc, 0).len(), 3, "an explicit no fill shows nothing");
+        assert_eq!(layout_ideas(&s.doc().unwrap().doc, 0).len(), 3, "an explicit no fill shows nothing");
     }
 
     #[test]
@@ -546,7 +680,7 @@ mod tests {
             style: Some(style),
             ..Default::default()
         });
-        assert!(ideas_for(&s.doc().unwrap().doc, 0).is_empty(), "the theme fill shows, so the box would stay on top");
+        assert!(layout_ideas(&s.doc().unwrap().doc, 0).is_empty(), "the theme fill shows, so the box would stay on top");
     }
 
     #[test]

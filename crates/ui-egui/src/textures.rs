@@ -33,6 +33,9 @@ struct Entry {
     _slide: Arc<Slide>,
     _master: Option<Arc<Master>>,
     stamp: u64,
+    /// Drawn at half resolution while the slide was changing quickly (browser only); replaced by a
+    /// full render once the changes pause.
+    draft: bool,
 }
 
 #[derive(Default)]
@@ -56,6 +59,10 @@ pub struct Textures {
     smartart: HashMap<String, TextureHandle>,
     clock: u64,
     pub last_render_ms: f64,
+    /// How long the last full-resolution canvas render took, and when the canvas last changed
+    /// (for the browser's half-resolution drafts while typing on slow slides).
+    full_render_ms: f64,
+    last_change_ms: f64,
 }
 
 impl Textures {
@@ -242,6 +249,12 @@ fn anim_key(anim: Option<(&deckcraft_anim::Timeline, f64)>) -> u64 {
     ms.wrapping_add(1).wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
 
+/// Browser drafts: only on slides whose full render takes longer than this, during edits that
+/// come less than `DRAFT_BURST_MS` apart; sharpened `DRAFT_SETTLE_MS` after the last one.
+const DRAFT_ABOVE_MS: f64 = 45.0;
+const DRAFT_BURST_MS: f64 = 700.0;
+const DRAFT_SETTLE_MS: f64 = 350.0;
+
 fn threads() -> u16 {
     if cfg!(target_arch = "wasm32") { 0 } else { std::thread::available_parallelism().map(|n| n.get().min(8) as u16).unwrap_or(0) }
 }
@@ -293,10 +306,56 @@ impl Textures {
             want,
             editing_text,
         };
+        let now = crate::now_ms();
         if let Some(e) = &self.canvas
             && e.key == key
         {
-            return Some((e.tex.clone(), e.region));
+            // A draft stays until the changes pause, then the full render replaces it.
+            if !e.draft || now - self.last_change_ms < DRAFT_SETTLE_MS {
+                if e.draft {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(DRAFT_SETTLE_MS as u64));
+                }
+                return Some((e.tex.clone(), e.region));
+            }
+        }
+        let changed = self.canvas.as_ref().is_none_or(|e| e.key != key);
+        // In the browser everything renders on one thread: on a slide that takes long to draw
+        // (large photos), a burst of edits (typing) is drawn at half resolution, a quarter of the
+        // work, and sharpened once the edits pause.
+        let draft = changed && cfg!(target_arch = "wasm32") && self.full_render_ms > DRAFT_ABOVE_MS && now - self.last_change_ms < DRAFT_BURST_MS;
+        if changed {
+            self.last_change_ms = now;
+        }
+        if draft {
+            let half = |v: i32| v.div_euclid(2);
+            let small = Region { x: half(want.x), y: half(want.y), w: want.w.div_ceil(2).max(1), h: want.h.div_ceil(2).max(1) };
+            let opts = RenderOpts {
+                scale: scale / 2.0,
+                edit,
+                gif_times,
+                threads: threads(),
+                offset: small.offset(),
+                size: Some(small.size()),
+                editing_text,
+                ..Default::default()
+            };
+            if anim.is_none() {
+                let (img, _) = deckcraft_render::render_slide_drawn(p, index, &opts);
+                self.canvas_renders += 1;
+                self.last_render_ms = crate::now_ms() - now;
+                let ci = to_color_image(&img, grayscale);
+                let tex = match self.canvas.take() {
+                    Some(mut e) => {
+                        replace_editor(ctx, &mut e.tex, ci);
+                        e.tex
+                    }
+                    None => upload_editor(ctx, "slide-canvas", ci),
+                };
+                let region = Region { x: small.x * 2, y: small.y * 2, w: small.w * 2, h: small.h * 2 };
+                self.canvas = Some(Entry { key, tex: tex.clone(), region, _slide: slide, _master: master, stamp: 0, draft: true });
+                ctx.request_repaint_after(std::time::Duration::from_millis(DRAFT_SETTLE_MS as u64));
+                return Some((tex, region));
+            }
         }
         let t0 = crate::now_ms();
         let render = |region: Region| {
@@ -330,6 +389,7 @@ impl Textures {
         }
         self.drawn = Some((index, drawn));
         self.last_render_ms = crate::now_ms() - t0;
+        self.full_render_ms = self.last_render_ms;
         let ci = to_color_image(&img, grayscale);
         let tex = match self.canvas.take() {
             Some(mut e) => {
@@ -338,7 +398,7 @@ impl Textures {
             }
             None => upload_editor(ctx, "slide-canvas", ci),
         };
-        self.canvas = Some(Entry { key, tex: tex.clone(), region, _slide: slide, _master: master, stamp: 0 });
+        self.canvas = Some(Entry { key, tex: tex.clone(), region, _slide: slide, _master: master, stamp: 0, draft: false });
         Some((tex, region))
     }
 
@@ -407,7 +467,7 @@ impl Textures {
         let tex = upload_editor(ctx, format!("thumb-{index}"), to_color_image(&img, grayscale));
         // Drop the old entry for this slide address; entries for slides that no longer exist age out.
         let region = key.want;
-        self.thumbs.insert(key.slide, Entry { key, tex: tex.clone(), region, _slide: slide, _master: master, stamp: clock });
+        self.thumbs.insert(key.slide, Entry { key, tex: tex.clone(), region, _slide: slide, _master: master, stamp: clock, draft: false });
         if self.thumbs.len() > 600 {
             let mut v: Vec<(usize, u64)> = self.thumbs.iter().map(|(k, e)| (*k, e.stamp)).collect();
             v.sort_by_key(|x| x.1);
