@@ -28,6 +28,14 @@ pub(super) fn review(app: &mut SlideApp, ui: &mut Ui) {
         {
             app.dialog = Some(crate::dialogs::Dialog::new("live"));
         }
+        let on = app.ui.pane.as_deref() == Some("copilot");
+        if big_button_ex(ui, Icon::Sparkle, "Copilot", true, false, on)
+            .0
+            .on_hover_text("Check the presentation and improve it (offline, free)")
+            .clicked()
+        {
+            let _ = app.run("view.pane", json!({"pane": "copilot", "toggle": true}));
+        }
     });
     group(ui, |ui| {
         big(app, ui, Icon::Spelling, "Spelling", "app.dialog", json!({"id": "spelling"}));
