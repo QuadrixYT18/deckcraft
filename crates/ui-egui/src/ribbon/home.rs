@@ -470,5 +470,7 @@ pub(super) fn home(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         big(app, ui, Icon::DesignIdeas, "Design\nIdeas", "view.pane", json!({"pane": "designer"}));
+        // The offline assistant: check the presentation, fix it, draft notes and agendas.
+        big(app, ui, Icon::Sparkle, "Copilot", "view.pane", json!({"pane": "copilot", "toggle": true}));
     });
 }

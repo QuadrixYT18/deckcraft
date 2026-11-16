@@ -13,6 +13,7 @@ use crate::{SlideApp, widgets};
 mod animation;
 mod background;
 mod comments;
+mod copilot;
 mod designer;
 mod effect_presets;
 mod format_shape;
@@ -22,6 +23,7 @@ mod thesaurus;
 use animation::animation;
 use background::background;
 use comments::{comments, revisions};
+use copilot::copilot;
 use designer::designer;
 use format_shape::format_shape;
 pub(crate) use format_shape::text_transparency_slider;
@@ -47,6 +49,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                 "selection" => "Selection",
                 "comments" => "Comments",
                 "designer" => "Design Ideas",
+                "copilot" => "Copilot",
                 "smartart" => "Text Pane",
                 "thesaurus" => "Thesaurus",
                 "revisions" => "Revisions",
@@ -73,6 +76,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                 "selection" => crate::selpane::show(app, ui),
                 "comments" => comments(app, ui),
                 "designer" => designer(app, ui),
+                "copilot" => copilot(app, ui),
                 "smartart" => smartart(app, ui),
                 "thesaurus" => thesaurus(app, ui),
                 "revisions" => revisions(app, ui),
