@@ -40,10 +40,23 @@ impl LiveNet for NativeNet {
         std::thread::spawn(move || {
             let agent: ureq::Agent =
                 ureq::Agent::config_builder().http_status_as_error(false).timeout_global(Some(Duration::from_secs(120))).build().into();
-            let result = agent.post(&url).header("Content-Type", &content_type).send(&body[..]).map_err(|e| e.to_string()).and_then(|mut r| {
-                let status = r.status().as_u16();
-                r.body_mut().with_config().limit(MAX_HTTP_ANSWER).read_to_string().map(|b| (status, b)).map_err(|e| e.to_string())
-            });
+            let send = || {
+                agent.post(&url).header("Content-Type", &content_type).send(&body[..]).map_err(|e| e.to_string()).and_then(|mut r| {
+                    let status = r.status().as_u16();
+                    r.body_mut().with_config().limit(MAX_HTTP_ANSWER).read_to_string().map(|b| (status, b)).map_err(|e| e.to_string())
+                })
+            };
+            let mut result = send();
+            // Nobody answers on this computer: start the server that ships with the app, then try
+            // again. Others on the network can then join with the code.
+            if result.is_err()
+                && let Some(port) = local_port(&url)
+            {
+                match crate::local_server::ensure(port) {
+                    Ok(()) => result = send(),
+                    Err(e) => result = Err(format!("the live session server couldn't be started: {e}")),
+                }
+            }
             *lock(&slot) = Some(result);
             if let Some(ctx) = ctx {
                 ctx.request_repaint();
@@ -136,5 +149,27 @@ fn socket_loop(url: &str, rx: &Receiver<String>, current: &AtomicU64, generation
             Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
             Err(e) => return e.to_string(),
         }
+    }
+}
+
+/// The port of a URL on this computer (`localhost`, `127.0.0.1`, `[::1]`), or `None`.
+fn local_port(url: &str) -> Option<u16> {
+    let rest = url.strip_prefix("http://")?;
+    let authority = rest.split('/').next()?;
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((h, p)) if !h.ends_with(':') => (h, p.parse().ok()?),
+        _ => (authority, 80),
+    };
+    matches!(host, "localhost" | "127.0.0.1" | "[::1]").then_some(port)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn only_this_computer_counts_as_local() {
+        assert_eq!(super::local_port("http://localhost:8080/api/sessions?x=1"), Some(8080));
+        assert_eq!(super::local_port("http://127.0.0.1/api"), Some(80));
+        assert_eq!(super::local_port("http://192.168.1.5:8080/api"), None);
+        assert_eq!(super::local_port("https://localhost:8080/api"), None);
     }
 }

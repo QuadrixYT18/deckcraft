@@ -23,6 +23,7 @@ mod display;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod live_net;
+mod local_server;
 mod logging;
 #[cfg(not(target_arch = "wasm32"))]
 mod pasteboard;
