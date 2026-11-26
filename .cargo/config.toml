@@ -2,6 +2,9 @@
 # (build.rs warns and continues without it). CI and releases set CRAFT_FONTS_DIR explicitly.
 [env]
 CRAFT_FONTS_DIR = { value = "../craft-fonts", relative = true }
+# The interface translations (storytold/craft-i18n) beside this repo, as for craft-fonts: with
+# the checkout there the interface can be German, French or Spanish; without it, English only.
+CRAFT_I18N_DIR = { value = "../craft-i18n", relative = true }
 
 [alias]
 xtask = "run --package xtask --"

@@ -35,19 +35,47 @@ fn apply_fix(app: &mut SlideApp, fix: &Value) -> Result<(), String> {
 
 pub(super) fn copilot(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    ui.label(RichText::new("Your presentation assistant. It runs on this device, free and offline.").color(t.text_dim));
+    ui.label(RichText::new(tl!("Your presentation assistant. It runs on this device, free and offline.")).color(t.text_dim));
     ui.add_space(8.0);
     let Some(st) = app.session.active() else { return };
     let key = (st.uid, st.revision);
     let slide = st.selection.slide;
 
-    ui.label(RichText::new("Create").strong());
-    action(app, ui, "Agenda slide", "Adds an agenda after the first slide, from the sections or the slide titles", "assist.agenda", json!({}));
-    action(app, ui, "Speaker notes for this slide", "Drafts notes from the slide's own text where the notes are empty", "assist.notes", json!({}));
-    action(app, ui, "Speaker notes for all slides", "Drafts notes for every slide whose notes are empty", "assist.notes", json!({"all": true}));
-    action(app, ui, "Split this slide in two", "Moves the second half of a crowded text box to a new slide", "assist.split", json!({"index": slide}));
+    ui.label(RichText::new(tl!("Create")).strong());
+    action(
+        app,
+        ui,
+        tl!("Agenda slide"),
+        tl!("Adds an agenda after the first slide, from the sections or the slide titles"),
+        "assist.agenda",
+        json!({}),
+    );
+    action(
+        app,
+        ui,
+        tl!("Speaker notes for this slide"),
+        tl!("Drafts notes from the slide's own text where the notes are empty"),
+        "assist.notes",
+        json!({}),
+    );
+    action(
+        app,
+        ui,
+        tl!("Speaker notes for all slides"),
+        tl!("Drafts notes for every slide whose notes are empty"),
+        "assist.notes",
+        json!({"all": true}),
+    );
+    action(
+        app,
+        ui,
+        tl!("Split this slide in two"),
+        tl!("Moves the second half of a crowded text box to a new slide"),
+        "assist.split",
+        json!({"index": slide}),
+    );
     let w = ui.available_width();
-    if ui.add(egui::Button::new("Design ideas for this slide").min_size(vec2(w, 30.0))).clicked() {
+    if ui.add(egui::Button::new(tl!("Design ideas for this slide")).min_size(vec2(w, 30.0))).clicked() {
         app.ui.pane = Some("designer".into());
     }
     ui.add_space(12.0);
@@ -62,18 +90,26 @@ pub(super) fn copilot(app: &mut SlideApp, ui: &mut Ui) {
     let findings = checked.result.get("findings").and_then(Value::as_array).cloned().unwrap_or_default();
     let stats = checked.result.get("stats").cloned().unwrap_or(Value::Null);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Check").strong());
+        ui.label(RichText::new(tl!("Check")).strong());
         if let (Some(s), Some(w)) = (stats.get("slides").and_then(Value::as_u64), stats.get("words").and_then(Value::as_u64)) {
-            ui.label(RichText::new(format!("{s} slides · {w} words")).color(t.text_dim));
+            ui.label(
+                RichText::new(crate::i18n::fmt(tl!("{slides} slides · {words} words"), &[("slides", &s.to_string()), ("words", &w.to_string())]))
+                    .color(t.text_dim),
+            );
         }
     });
     if findings.is_empty() {
-        ui.label(RichText::new("✔ Nothing to improve. Well done!").color(Color32::from_rgb(40, 160, 80)));
+        ui.label(RichText::new(tl!("✔ Nothing to improve. Well done!")).color(Color32::from_rgb(40, 160, 80)));
         return;
     }
     let fixable: Vec<Value> = findings.iter().filter_map(|f| f.get("fix").cloned()).collect();
     if fixable.len() > 1
-        && ui.add(egui::Button::new(format!("Fix all {} automatically", fixable.len())).min_size(vec2(ui.available_width(), 28.0))).clicked()
+        && ui
+            .add(
+                egui::Button::new(crate::i18n::fmt(tl!("Fix all {n} automatically"), &[("n", &fixable.len().to_string())]))
+                    .min_size(vec2(ui.available_width(), 28.0)),
+            )
+            .clicked()
     {
         let mut ok = 0;
         // Deletions last, so earlier fixes still find their shapes.
@@ -83,12 +119,13 @@ pub(super) fn copilot(app: &mut SlideApp, ui: &mut Ui) {
                 ok += 1;
             }
         }
-        app.set_status(format!("Copilot: fixed {ok} of {}", fixable.len()));
+        app.set_status(crate::i18n::fmt(tl!("Copilot: fixed {ok} of {n}"), &[("ok", &ok.to_string()), ("n", &fixable.len().to_string())]));
     }
     ui.add_space(4.0);
     for (i, f) in findings.iter().enumerate() {
         let warning = f.get("severity").and_then(Value::as_str) == Some("warning");
-        let msg = f.get("message").and_then(Value::as_str).unwrap_or("");
+        let msg = message(f);
+        let msg = msg.as_str();
         let slide_no = f.get("slide").and_then(Value::as_u64);
         egui::Frame::NONE.fill(t.field_bg).corner_radius(6.0).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -98,31 +135,31 @@ pub(super) fn copilot(app: &mut SlideApp, ui: &mut Ui) {
             });
             ui.horizontal(|ui| {
                 if let Some(n) = slide_no
-                    && ui.small_button(format!("Go to slide {n}")).clicked()
+                    && ui.small_button(crate::i18n::fmt(tl!("Go to slide {n}"), &[("n", &n.to_string())])).clicked()
                 {
                     let _ = app.run("slide.go", json!({"index": n.saturating_sub(1)}));
                 }
                 if let Some(fix) = f.get("fix")
-                    && ui.small_button("Fix").clicked()
+                    && ui.small_button(tl!("Fix")).clicked()
                 {
                     match apply_fix(app, fix) {
-                        Ok(()) => app.set_status("Copilot: fixed"),
+                        Ok(()) => app.set_status(tl!("Copilot: fixed")),
                         Err(e) => app.set_status(format!("Copilot: {e}")),
                     }
                 }
                 if f.get("rule").and_then(Value::as_str) == Some("noNotes")
                     && let Some(n) = slide_no
-                    && ui.small_button("Draft notes").clicked()
+                    && ui.small_button(tl!("Draft notes")).clicked()
                 {
                     let _ = app.run("slide.go", json!({"index": n.saturating_sub(1)}));
                     let _ = app.run("assist.notes", json!({}));
                 }
                 if matches!(f.get("rule").and_then(Value::as_str), Some("manyLines" | "wordy"))
                     && let Some(n) = slide_no
-                    && ui.small_button("Split slide").clicked()
+                    && ui.small_button(tl!("Split slide")).clicked()
                 {
                     match app.run("assist.split", json!({"index": n.saturating_sub(1)})) {
-                        Ok(_) => app.set_status("Copilot: slide split in two"),
+                        Ok(_) => app.set_status(tl!("Copilot: slide split in two")),
                         Err(e) => app.set_status(format!("Copilot: {e}")),
                     }
                 }
@@ -132,4 +169,33 @@ pub(super) fn copilot(app: &mut SlideApp, ui: &mut Ui) {
             ui.add_space(4.0);
         }
     }
+}
+
+/// A finding's text in the interface language: the rule's sentence with the finding's values
+/// (the engine's English `message` when the rule is one this pane doesn't know).
+fn message(f: &Value) -> String {
+    let template = match f.get("rule").and_then(Value::as_str) {
+        Some("longTitle") => "The title has {words} words. Titles of up to {max} words are read at a glance.",
+        Some("manyLines") => "\"{name}\" has {lines} lines. Up to {max} bullets per box keep it readable; split it over two slides.",
+        Some("smallText") => "\"{name}\" uses {size} pt text. From {min} pt it can be read from the back of a room.",
+        Some("emptyPlaceholder") => "\"{name}\" is empty. Fill it or delete it.",
+        Some("wordy") => "Slide {slide} has {words} words. Around {max} or fewer keeps the audience listening rather than reading.",
+        Some("noTitle") => "Slide {slide} has no title. A title helps the audience and screen readers follow along.",
+        Some("noNotes") => "Slide {slide} has no speaker notes.",
+        Some("manyFonts") => "The presentation uses {count} fonts ({fonts}). Two or three look calmer.",
+        Some("noSections") => "{slides} slides and no sections. Sections (Home › Section) group the slide list.",
+        _ => return f.get("message").and_then(Value::as_str).unwrap_or("").to_string(),
+    };
+    let args = f.get("args").and_then(Value::as_object);
+    let value = |k: &str| -> String {
+        match args.and_then(|a| a.get(k)) {
+            Some(Value::String(s)) => s.clone(),
+            Some(v) => v.to_string(),
+            None => String::new(),
+        }
+    };
+    let keys = ["words", "max", "name", "lines", "size", "min", "slide", "count", "fonts", "slides"];
+    let vals: Vec<(&str, String)> = keys.iter().map(|k| (*k, value(k))).collect();
+    let pairs: Vec<(&str, &str)> = vals.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    crate::i18n::fmt(tl!(template), &pairs)
 }

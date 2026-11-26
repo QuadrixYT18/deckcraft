@@ -132,16 +132,18 @@ impl Live {
     /// A short status for the status bar.
     pub fn badge(&self) -> (String, bool) {
         match &self.status {
-            LiveStatus::Requesting | LiveStatus::Connecting => ("Live: connecting…".into(), false),
+            LiveStatus::Requesting | LiveStatus::Connecting => (tl!("Live: connecting…").into(), false),
             LiveStatus::Live => {
                 let n = self.online();
                 let pending = self.client.as_ref().map(|c| c.unconfirmed()).unwrap_or(0);
-                let viewer = if self.role() == Some(Role::Viewer) { " · view only" } else { "" };
-                let sync = if pending > 0 { " · syncing" } else { "" };
-                (format!("Live · {n} {}{viewer}{sync}", if n == 1 { "person" } else { "people" }), true)
+                let viewer = if self.role() == Some(Role::Viewer) { tl!(" · view only") } else { "" };
+                let sync = if pending > 0 { tl!(" · syncing") } else { "" };
+                let people =
+                    if n == 1 { tl!("Live · 1 person").to_string() } else { crate::i18n::fmt(tl!("Live · {n} people"), &[("n", &n.to_string())]) };
+                (format!("{people}{viewer}{sync}"), true)
             }
-            LiveStatus::Reconnecting(_) => ("Live: offline, reconnecting…".into(), false),
-            LiveStatus::Ended(r) => (format!("Live session ended ({r})"), false),
+            LiveStatus::Reconnecting(_) => (tl!("Live: offline, reconnecting…").into(), false),
+            LiveStatus::Ended(r) => (crate::i18n::fmt(tl!("Live session ended ({reason})"), &[("reason", r)]), false),
         }
     }
 }
@@ -257,11 +259,11 @@ fn handle_http(app: &mut SlideApp, result: Result<(u16, String), String>) {
             let msg = answer.get("error").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| format!("the server answered {status}"));
             live.status = LiveStatus::Ended(msg.clone());
             live.error = Some(msg.clone());
-            app.notify(format!("Live session: {msg}"));
+            app.notify(crate::i18n::fmt(tl!("Live session: {message}"), &[("message", &msg)]));
             return;
         }
         (Err(e), _) => {
-            let msg = format!("Can't reach {}: {e}", live.server);
+            let msg = crate::i18n::fmt(tl!("Can't reach {server}: {error}"), &[("server", &live.server), ("error", &e)]);
             live.status = LiveStatus::Ended("not connected".into());
             live.error = Some(msg);
             return;
@@ -331,7 +333,7 @@ fn handle_events(app: &mut SlideApp, events: Vec<Event>) {
                 if let (Some(doc), Some(client)) = (doc, app.live.as_mut().and_then(|l| l.client.as_mut())) {
                     client.adopt(doc);
                 }
-                app.set_status("Live session: connected");
+                app.set_status(tl!("Live session: connected"));
             }
             Event::Apply(patch) => {
                 if let Some(uid) = app.live.as_ref().and_then(|l| l.uid) {
@@ -340,16 +342,18 @@ fn handle_events(app: &mut SlideApp, events: Vec<Event>) {
             }
             Event::Presence => {}
             Event::Role(role) => app.set_status(match role {
-                Role::Viewer => "Live session: you can now only view",
-                _ => "Live session: you can edit again",
+                Role::Viewer => tl!("Live session: you can now only view"),
+                _ => tl!("Live session: you can edit again"),
             }),
-            Event::Rejected(reason) => app.set_status(format!("Live session: a change was refused ({reason}) and undone")),
+            Event::Rejected(reason) => {
+                app.set_status(crate::i18n::fmt(tl!("Live session: a change was refused ({reason}) and undone"), &[("reason", &reason)]))
+            }
             Event::Closed(reason) => {
                 let msg = match reason.as_str() {
-                    "kicked" => "The host removed you from the session".to_string(),
-                    "ended" => "The host ended the session".to_string(),
-                    "unauthorized" => "The invitation is no longer valid".to_string(),
-                    "replaced" => "This session was opened elsewhere".to_string(),
+                    "kicked" => tl!("The host removed you from the session").to_string(),
+                    "ended" => tl!("The host ended the session").to_string(),
+                    "unauthorized" => tl!("The invitation is no longer valid").to_string(),
+                    "replaced" => tl!("This session was opened elsewhere").to_string(),
                     other => other.to_string(),
                 };
                 if let Some(net) = app.services.live_net.as_mut() {
@@ -358,7 +362,7 @@ fn handle_events(app: &mut SlideApp, events: Vec<Event>) {
                 if let Some(live) = app.live.as_mut() {
                     live.status = LiveStatus::Ended(msg.clone());
                 }
-                app.notify(format!("Live session: {msg}. Your copy stays open."));
+                app.notify(crate::i18n::fmt(tl!("Live session: {message}. Your copy stays open."), &[("message", &msg)]));
             }
         }
     }
@@ -423,7 +427,7 @@ pub fn tick(app: &mut SlideApp, ctx: &egui::Context) {
                 if first {
                     // The whole presentation (pictures included) comes next; on a slow network or
                     // with many photos that takes a while, and there is only the start screen.
-                    app.notify("Live session: connected. Loading the presentation…");
+                    app.notify(tl!("Live session: connected. Loading the presentation…"));
                 }
             }
             LiveSocketEvent::Text(text) => {
@@ -455,7 +459,7 @@ pub fn tick(app: &mut SlideApp, ctx: &egui::Context) {
                     // Before the presentation arrived there is only the start screen: say why.
                     if live.uid.is_none() {
                         let server = live.server.clone();
-                        app.notify(format!("Live session: can't connect to {server} yet ({why}). Retrying… Check that this device is on the same network as the host and that the server is running."));
+                        app.notify(crate::i18n::fmt(tl!("Live session: can't connect to {server} yet ({why}). Retrying… Check that this device is on the same network as the host and that the server is running."), &[("server", &server), ("why", &why)]));
                     }
                 }
             }
@@ -483,7 +487,7 @@ pub fn tick(app: &mut SlideApp, ctx: &egui::Context) {
             let revert = app.live.as_mut().and_then(|l| l.client.as_mut()).and_then(|c| c.local(&doc));
             if let Some(revert) = revert {
                 apply_patch(app, uid, &revert);
-                app.set_status("This live session is view only");
+                app.set_status(tl!("This live session is view only"));
             }
         }
         let slide = uid.and_then(|u| app.session.documents().iter().find(|d| d.uid == u)).map(|d| d.selection.slide);
@@ -513,8 +517,8 @@ pub fn dialog(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     let t = Tokens::get(ui.ctx());
     ui.set_min_width(420.0);
     if app.services.live_net.is_none() {
-        ui.label("Live sessions aren't available in this build.");
-        return ui.button("Close").clicked();
+        ui.label(tl!("Live sessions aren't available in this build."));
+        return ui.button(tl!("Close")).clicked();
     }
     let active = app.live.as_ref().is_some_and(Live::is_active);
     if active {
@@ -529,10 +533,10 @@ pub fn dialog(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     let mut name = d.fields.entry("name".into()).or_insert_with(|| app.session.prefs.author.clone()).clone();
     let mut code = d.fields.get("code").cloned().unwrap_or_default();
     egui::Grid::new("live_fields").num_columns(2).spacing(vec2(8.0, 8.0)).show(ui, |ui| {
-        let l = ui.label("Server");
+        let l = ui.label(tl!("Server"));
         ui.add(egui::TextEdit::singleline(&mut server).desired_width(280.0)).labelled_by(l.id);
         ui.end_row();
-        let l = ui.label("Your name");
+        let l = ui.label(tl!("Your name"));
         ui.add(egui::TextEdit::singleline(&mut name).desired_width(280.0)).labelled_by(l.id);
         ui.end_row();
     });
@@ -540,11 +544,12 @@ pub fn dialog(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     let mut close = false;
     ui.group(|ui| {
         ui.set_width(ui.available_width());
-        ui.label(RichText::new("Share this presentation").strong());
+        ui.label(RichText::new(tl!("Share this presentation")).strong());
         ui.label(
-            RichText::new("Starts a session on the server with the open presentation. You get an access code to give to others.").color(t.text_dim),
+            RichText::new(tl!("Starts a session on the server with the open presentation. You get an access code to give to others."))
+                .color(t.text_dim),
         );
-        if ui.add_enabled(app.session.active().is_some(), egui::Button::new("Start live session").min_size(vec2(160.0, 30.0))).clicked() {
+        if ui.add_enabled(app.session.active().is_some(), egui::Button::new(tl!("Start live session")).min_size(vec2(160.0, 30.0))).clicked() {
             match start(app, &server, &name) {
                 Ok(()) => {}
                 Err(e) => app.set_status(e),
@@ -554,11 +559,11 @@ pub fn dialog(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     ui.add_space(8.0);
     ui.group(|ui| {
         ui.set_width(ui.available_width());
-        ui.label(RichText::new("Join a session").strong());
+        ui.label(RichText::new(tl!("Join a session")).strong());
         ui.horizontal(|ui| {
-            let l = ui.label("Access code");
+            let l = ui.label(tl!("Access code"));
             ui.add(egui::TextEdit::singleline(&mut code).desired_width(160.0).hint_text("ABCDE-FGHJK")).labelled_by(l.id);
-            if ui.add_enabled(!code.trim().is_empty() && !name.trim().is_empty(), egui::Button::new("Join").min_size(vec2(80.0, 30.0))).clicked()
+            if ui.add_enabled(!code.trim().is_empty() && !name.trim().is_empty(), egui::Button::new(tl!("Join")).min_size(vec2(80.0, 30.0))).clicked()
                 && let Err(e) = join(app, &server, &name, &code)
             {
                 app.set_status(e);
@@ -570,7 +575,7 @@ pub fn dialog(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     d.fields.insert("code".into(), code);
     ui.add_space(8.0);
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        if ui.button("Close").clicked() {
+        if ui.button(tl!("Close")).clicked() {
             close = true;
         }
     });
@@ -586,23 +591,23 @@ fn session_view(app: &mut SlideApp, ui: &mut Ui, t: Tokens) -> bool {
         if let Some(c) = &live.client
             && !c.title.is_empty()
         {
-            ui.label(format!("Session: {}", c.title));
+            ui.label(crate::i18n::fmt(tl!("Session: {title}"), &[("title", &c.title)]));
         }
         ui.add_space(6.0);
         if let Some(code) = &live.code {
-            ui.label("Access code");
+            ui.label(tl!("Access code"));
             ui.add(egui::Label::new(RichText::new(code).size(30.0).monospace().strong()).selectable(true));
             ui.horizontal(|ui| {
-                if ui.button("Copy code").clicked() {
+                if ui.button(tl!("Copy code")).clicked() {
                     ui.ctx().copy_text(code.clone());
                 }
                 if let Some(link) = &live.invite
-                    && ui.button("Copy invitation link").clicked()
+                    && ui.button(tl!("Copy invitation link")).clicked()
                 {
                     ui.ctx().copy_text(link.clone());
                 }
                 if let Some(dash) = &live.dashboard
-                    && ui.button("Open host dashboard").clicked()
+                    && ui.button(tl!("Open host dashboard")).clicked()
                 {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(dash.clone()));
                 }
@@ -612,13 +617,13 @@ fn session_view(app: &mut SlideApp, ui: &mut Ui, t: Tokens) -> bool {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     qr_code(ui, link, 180.0);
-                    ui.label(RichText::new("Scan with a phone or tablet\nto join this session.").color(t.text_dim));
+                    ui.label(RichText::new(tl!("Scan with a phone or tablet\nto join this session.")).color(t.text_dim));
                 });
             }
             ui.add_space(6.0);
         }
         if let Some(c) = &live.client {
-            ui.label(RichText::new("People").strong());
+            ui.label(RichText::new(tl!("People")).strong());
             for p in &c.peers {
                 ui.horizontal(|ui| {
                     let colour = if p.online { Color32::from_rgb(40, 160, 80) } else { t.text_dim };
@@ -627,7 +632,7 @@ fn session_view(app: &mut SlideApp, ui: &mut Ui, t: Tokens) -> bool {
                     ui.label(format!("{}{}", p.name, if you { " (you)" } else { "" }));
                     ui.label(RichText::new(p.role.as_str()).color(t.text_dim));
                     if let Some(s) = p.slide {
-                        ui.label(RichText::new(format!("slide {}", s.saturating_add(1))).color(t.text_dim));
+                        ui.label(RichText::new(crate::i18n::fmt(tl!("slide {n}"), &[("n", &s.saturating_add(1).to_string())])).color(t.text_dim));
                     }
                 });
             }
@@ -635,11 +640,11 @@ fn session_view(app: &mut SlideApp, ui: &mut Ui, t: Tokens) -> bool {
     }
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.button("Leave session").clicked() {
+        if ui.button(tl!("Leave session")).clicked() {
             leave_now = true;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Close").clicked() {
+            if ui.button(tl!("Close")).clicked() {
                 close = true;
             }
         });

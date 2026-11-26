@@ -96,6 +96,7 @@ fn craft_i18n() -> String {
     for (code, shared, app) in entries {
         // `{:?}` escapes the path (Windows backslashes) as a Rust string literal.
         let shared = shared.map_or_else(|| "\"\"".to_string(), |p| format!("include_str!({p:?})"));
+        let app = with_extra(&code, &app);
         let _ = writeln!(o, "    ({code:?}, {shared}, include_str!({app:?})),");
     }
     o.push_str("];\n");
@@ -213,4 +214,22 @@ fn generate(json: &Value, people: &toml::Table) -> String {
     }
     let _ = writeln!(o, "];");
     o
+}
+
+/// This branch's own rows (`i18n/<locale>/deckcraft-extra.tsv`: the live session and Copilot
+/// strings, which craft-i18n doesn't have yet) appended to the locale's DeckCraft catalog, in a
+/// copy under `OUT_DIR`. Without an extra file the catalog is used as it is.
+fn with_extra(code: &str, app: &std::path::Path) -> std::path::PathBuf {
+    let Some(manifest) = std::env::var_os("CARGO_MANIFEST_DIR") else { return app.to_path_buf() };
+    let extra = std::path::PathBuf::from(manifest).join("../../i18n").join(code).join("deckcraft-extra.tsv");
+    println!("cargo::rerun-if-changed={}", extra.display());
+    let (Ok(base), Ok(more), Some(out)) = (std::fs::read_to_string(app), std::fs::read_to_string(&extra), std::env::var_os("OUT_DIR")) else {
+        return app.to_path_buf();
+    };
+    let joined = std::path::PathBuf::from(out).join(format!("deckcraft-{code}.tsv"));
+    let text = format!("{}\n{}", base.trim_end(), more);
+    if std::fs::write(&joined, text).is_err() {
+        return app.to_path_buf();
+    }
+    joined
 }

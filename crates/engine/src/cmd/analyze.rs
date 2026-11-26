@@ -14,7 +14,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Check Presentation",
         [],
         None,
-        "{} → {findings: [{slide, shape?, severity: info|warning, rule, message, fix?: [{command, params}] (run in order)}], stats: {slides, words, fonts}}",
+        "{} → {findings: [{slide, shape?, severity: info|warning, rule, message, args (the values in the message), fix?: [{command, params}] (run in order)}], stats: {slides, words, fonts}}",
         has_doc,
         analyze_cmd
     )]
@@ -71,14 +71,16 @@ pub fn analyze(p: &Presentation) -> Value {
                     has_title_text = true;
                 }
                 if w > MAX_TITLE_WORDS {
-                    findings.push(json!({"slide": n, "shape": sh.id.0, "severity": "info", "rule": "longTitle",
-                        "message": format!("The title has {w} words. Titles of up to {MAX_TITLE_WORDS} words are read at a glance.")}));
+                    findings.push(
+                        json!({"slide": n, "shape": sh.id.0, "severity": "info", "rule": "longTitle", "args": {"words": w, "max": MAX_TITLE_WORDS},
+                        "message": format!("The title has {w} words. Titles of up to {MAX_TITLE_WORDS} words are read at a glance.")}),
+                    );
                 }
             }
             if let Some(body) = &sh.text {
                 let lines = body.paragraphs.iter().filter(|p| !p.text().trim().is_empty()).count();
                 if lines > MAX_LINES && !is_title(sh) {
-                    findings.push(json!({"slide": n, "shape": sh.id.0, "severity": "warning", "rule": "manyLines",
+                    findings.push(json!({"slide": n, "shape": sh.id.0, "severity": "warning", "rule": "manyLines", "args": {"name": sh.name, "lines": lines, "max": MAX_LINES},
                         "message": format!("\"{}\" has {lines} lines. Up to {MAX_LINES} bullets per box keep it readable; split it over two slides.", sh.name)}));
                 }
                 let mut smallest: Option<f64> = None;
@@ -95,7 +97,7 @@ pub fn analyze(p: &Presentation) -> Value {
                     }
                 }
                 if let Some(sz) = smallest.filter(|s| *s < MIN_SIZE) {
-                    findings.push(json!({"slide": n, "shape": sh.id.0, "severity": "warning", "rule": "smallText",
+                    findings.push(json!({"slide": n, "shape": sh.id.0, "severity": "warning", "rule": "smallText", "args": {"name": sh.name, "size": sz.round() as i64, "min": MIN_SIZE as i64},
                     "message": format!("\"{}\" uses {sz:.0} pt text. From {MIN_SIZE:.0} pt it can be read from the back of a room.", sh.name),
                     "fix": [
                         {"command": "slide.go", "params": {"index": i}},
@@ -106,7 +108,7 @@ pub fn analyze(p: &Presentation) -> Value {
             }
             // An empty placeholder shows its prompt while editing and nothing in the show.
             if sh.is_placeholder() && w == 0 && matches!(sh.ph_type(), Some(PhType::Body | PhType::SubTitle | PhType::Obj)) && sh.text.is_some() {
-                findings.push(json!({"slide": n, "shape": sh.id.0, "severity": "info", "rule": "emptyPlaceholder",
+                findings.push(json!({"slide": n, "shape": sh.id.0, "severity": "info", "rule": "emptyPlaceholder", "args": {"name": sh.name},
                 "message": format!("\"{}\" is empty. Fill it or delete it.", sh.name),
                 "fix": [
                     {"command": "slide.go", "params": {"index": i}},
@@ -116,25 +118,25 @@ pub fn analyze(p: &Presentation) -> Value {
         }
         total_words += slide_words;
         if slide_words > MAX_WORDS {
-            findings.push(json!({"slide": n, "severity": "warning", "rule": "wordy",
+            findings.push(json!({"slide": n, "severity": "warning", "rule": "wordy", "args": {"slide": n, "words": slide_words, "max": MAX_WORDS},
                 "message": format!("Slide {n} has {slide_words} words. Around {MAX_WORDS} or fewer keeps the audience listening rather than reading.")}));
         }
         if !has_title_text && !slide.hidden {
-            findings.push(json!({"slide": n, "severity": "info", "rule": "noTitle",
+            findings.push(json!({"slide": n, "severity": "info", "rule": "noTitle", "args": {"slide": n},
                 "message": format!("Slide {n} has no title. A title helps the audience and screen readers follow along.")}));
         }
         if slide.notes.text().trim().is_empty() && slide_words > 0 {
-            findings.push(json!({"slide": n, "severity": "info", "rule": "noNotes",
+            findings.push(json!({"slide": n, "severity": "info", "rule": "noNotes", "args": {"slide": n},
                 "message": format!("Slide {n} has no speaker notes.")}));
         }
     }
     if fonts.len() > MAX_FONTS {
-        findings.push(json!({"slide": null, "severity": "warning", "rule": "manyFonts",
+        findings.push(json!({"slide": null, "severity": "warning", "rule": "manyFonts", "args": {"count": fonts.len(), "fonts": fonts.iter().cloned().collect::<Vec<_>>().join(", ")},
             "message": format!("The presentation uses {} fonts ({}). Two or three look calmer.", fonts.len(), fonts.iter().cloned().collect::<Vec<_>>().join(", "))}));
     }
     // Long decks without sections are hard to navigate.
     if p.slides.len() > 15 && p.sections.is_empty() {
-        findings.push(json!({"slide": null, "severity": "info", "rule": "noSections",
+        findings.push(json!({"slide": null, "severity": "info", "rule": "noSections", "args": {"slides": p.slides.len()},
             "message": format!("{} slides and no sections. Sections (Home › Section) group the slide list.", p.slides.len())}));
     }
     json!({
