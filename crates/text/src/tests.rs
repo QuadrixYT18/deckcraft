@@ -2026,3 +2026,23 @@ fn serbian_runs_draw_the_fonts_serbian_forms() {
     assert_eq!(at(2), b(&face, "sr-Cyrl-RS"), "{family}: the Serbian б");
     assert_eq!(at(6), b(&face, "ru-RU"), "{family}: the Russian б");
 }
+
+#[test]
+fn a_tab_in_a_hanging_indent_stops_where_the_wrapped_lines_start() {
+    let (p, mut sh) = setup("7\tBedieneinrichtungen im anderen Fuehrerraum beruecksichtigen", 300.0, 300.0);
+    let para = &mut sh.text.as_mut().unwrap().paragraphs[0];
+    for r in &mut para.runs {
+        r.props.size = Some(18.0);
+    }
+    let pp = &mut para.props;
+    pp.bullet = Some(Bullet::None);
+    pp.margin_left = Some(40.0);
+    pp.indent = Some(-40.0);
+    pp.default_tab = Some(72.0);
+    let l = lay(&p, &sh, 300.0, 300.0);
+    assert!(l.lines.len() > 1, "the text wraps");
+    // The text after the tab and the second line start at the same x.
+    let after_tab = l.lines[0].edges[2].0;
+    let second = l.lines[1].edges[0].0;
+    assert!((after_tab - second).abs() < 0.01, "{after_tab} vs {second}");
+}
