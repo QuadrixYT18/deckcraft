@@ -21,6 +21,7 @@ egui = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 chrono = { workspace = true }
+thiserror = { workspace = true }
 
 [build-dependencies]
 # Icon + VERSIONINFO for deckcraft.exe; build.rs only uses it when the target is Windows.
@@ -36,6 +37,10 @@ cpal = "0.16"
 deckcraft-collab = { workspace = true }
 tungstenite = { version = "0.27", features = ["rustls-tls-webpki-roots"] }
 ureq = "3"
+
+[target.'cfg(windows)'.dependencies]
+# An explicit AppUserModelID for DeckCraft Nightly, so its taskbar group and toasts are not stable's.
+winsafe = { version = "0.0.29", features = ["user", "shell"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Finder double-click, Open With, Dock drops and `open -a DeckCraft deck.pptx` arrive as a

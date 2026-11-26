@@ -75,4 +75,7 @@ pub struct Services {
     pub displays: Option<Box<dyn FnMut() -> Option<usize>>>,
     /// The network for live sessions (Review › Live Session); `None` hides the feature.
     pub live_net: Option<Box<dyn crate::live::LiveNet>>,
+    /// Work that must finish on a clean quit. `eframe::App::on_exit` takes and runs it once: on
+    /// macOS ⌘Q ends the process inside AppKit's terminate, so nothing after `run_native` runs.
+    pub at_exit: Option<Box<dyn FnOnce()>>,
 }
