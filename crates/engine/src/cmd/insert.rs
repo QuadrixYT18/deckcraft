@@ -98,7 +98,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Date & Time",
             ["Insert", "Text"],
             None,
-            "{format?: datetime1..datetime13, update?: bool, language?: en-US|en-GB|fr-FR|ja-JP|sv-SE} — no keys opens the dialog; in the Handout or Notes Master view it fills the selected date placeholder (else the master's own) and answers where: \"master\"",
+            "{format?: datetime1..datetime13, update?: bool, language?: de-DE|en-US|en-GB|fr-FR|ja-JP|sv-SE} — no keys opens the dialog; in the Handout or Notes Master view it fills the selected date placeholder (else the master's own) and answers where: \"master\"",
             has_slide,
             date_time
         ),
@@ -492,7 +492,7 @@ mod tests {
             json!({"format": "datetime14"}),
             json!({"format": "nope"}),
             json!({"update": "yes"}),
-            json!({"language": "de-DE"}),
+            json!({"language": "it-IT"}),
             json!({"language": ""}),
         ] {
             let err = s.execute("insert.dateTime", &p).unwrap_err();

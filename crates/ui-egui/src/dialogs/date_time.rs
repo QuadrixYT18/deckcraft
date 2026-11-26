@@ -1,12 +1,23 @@
 use super::{DATE_KINDS, Dialog, SlideApp, Tokens, Ui, buttons, check, json};
 
 const DATE_LANGS: &[(&str, &str)] = &[
+    ("de-DE", "Deutsch (Deutschland)"),
     ("en-US", "English (United States)"),
     ("en-GB", "English (United Kingdom)"),
     ("fr-FR", "French (France)"),
     ("ja-JP", "Japanese"),
     ("sv-SE", "Swedish"),
 ];
+
+/// The language the dialog opens on: the text's own where the list has it, else US English.
+fn default_lang(app: &SlideApp) -> String {
+    let lang = super::selected_language(app).0;
+    let primary = lang.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
+    DATE_LANGS
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(&lang) || k.split('-').next().is_some_and(|p| p.eq_ignore_ascii_case(&primary)))
+        .map_or_else(|| "en-US".to_string(), |(k, _)| (*k).to_string())
+}
 
 /// Samples `field_text` can compute for `lang`. Named months and AM/PM exist for English only;
 /// other languages keep the numeric date and the 24-hour times.
@@ -31,7 +42,7 @@ pub(super) fn date_rows(lang: &str) -> Vec<(&'static str, String)> {
 pub(super) fn date_time_dialog(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     ui.set_min_width(440.0);
     ui.label(tl!("Available formats:"));
-    let lang = d.get("language", "en-US");
+    let lang = d.get("language", &default_lang(app));
     let rows = date_rows(&lang);
     if !rows.iter().any(|(k, _)| *k == d.get("format", "datetime1"))
         && let Some((k, _)) = rows.first()
@@ -71,7 +82,7 @@ pub(super) fn date_time_dialog(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) 
     let update = check(ui, d, "Update automatically", "update", true);
     let (ok, cancel) = buttons(ui, "OK");
     if ok {
-        let lang = d.get("language", "en-US");
+        let lang = d.get("language", &default_lang(app));
         let mut format = d.get("format", "datetime1");
         let probe = deckcraft_text::datetime::DateTime::new(2026, 10, 9, 20, 5, 7);
         if deckcraft_text::datetime::field_text(&format, Some(&lang), probe).is_none() {
