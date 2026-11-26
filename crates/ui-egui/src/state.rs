@@ -73,6 +73,8 @@ pub struct UiState {
     pub smart_guides: bool,
     /// None = fit to window.
     pub zoom: Option<f32>,
+    /// Crop mode (Picture Format › Crop) on this picture: handles on its edges cut it to any size.
+    pub crop: Option<deckcraft_model::ShapeId>,
     pub sorter_zoom: f32,
     pub recent: Vec<String>,
     pub presenter_view: bool,
@@ -117,6 +119,7 @@ impl Default for UiState {
             guides: false,
             smart_guides: true,
             zoom: None,
+            crop: None,
             sorter_zoom: 1.0,
             recent: vec![],
             presenter_view: true,

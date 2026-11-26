@@ -16,6 +16,7 @@ use crate::SlideApp;
 use crate::theme::{self, Tokens};
 
 mod context_menu;
+mod crop;
 mod guides;
 mod ime;
 mod input;
@@ -339,9 +340,12 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         ruler(&painter, avail, slide_rect, scale, app.session.prefs.units, &t);
         ruler_markers(app, ui, &painter, avail, xf, &t);
     }
+    let cropping = crop::crop_mode(app, ui, &painter, xf);
     pointer(app, ui, &resp, xf);
     if !app.anim_preview_active() {
-        overlays(app, ui, &painter, xf, &t);
+        if !cropping {
+            overlays(app, ui, &painter, xf, &t);
+        }
         ime_output(app, ui, xf);
         media_bar(app, ui, xf);
         gif_buttons(app, ui, xf, &gifs);

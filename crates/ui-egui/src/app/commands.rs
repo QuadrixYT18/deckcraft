@@ -235,6 +235,18 @@ impl SlideApp {
             }
             "app.about" => self.dialog = Some(dialogs::Dialog::new("about")),
             "live.dialog" => self.dialog = Some(dialogs::Dialog::new("live")),
+            "picture.cropMode" => {
+                let picture = self.session.active().and_then(|d| {
+                    let id = *d.selection.shapes.first()?;
+                    matches!(d.shape(id)?.kind, deckcraft_model::ShapeKind::Picture { .. }).then_some(id)
+                });
+                let on = self.flag(p, self.ui.crop.is_some());
+                if on && picture.is_none() {
+                    return Err("select a picture to crop".into());
+                }
+                self.ui.crop = if on { picture } else { None };
+                return Ok(json!({"on": self.ui.crop.is_some()}));
+            }
             "live.start" | "live.join" => {
                 let server = p.get("server").and_then(Value::as_str).ok_or("missing `server`")?;
                 let name = p.get("name").and_then(Value::as_str).unwrap_or(self.session.prefs.author.as_str()).to_string();

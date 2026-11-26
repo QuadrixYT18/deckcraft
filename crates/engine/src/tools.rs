@@ -236,6 +236,47 @@ enum Drag {
 }
 
 /// Shape-gallery names that draw a freeform path instead of a preset.
+/// Where a cropped picture's whole image lies on the slide: its box grown by the crop (`left,
+/// top, right, bottom` fractions of the image, as `PictureFill::crop` holds them; a flip swaps
+/// which side of the box each one applies to).
+pub fn picture_full_rect(b: deckcraft_geom::Xfrm, crop: [f64; 4]) -> deckcraft_geom::Xfrm {
+    let [l, t, r, bo] = crop;
+    let (l, r) = if b.flip_h { (r, l) } else { (l, r) };
+    let (t, bo) = if b.flip_v { (bo, t) } else { (t, bo) };
+    let fw = b.w / (1.0 - l - r).max(0.01);
+    let fh = b.h / (1.0 - t - bo).max(0.01);
+    deckcraft_geom::Xfrm { x: b.x - l * fw, y: b.y - t * fh, w: fw, h: fh, ..b }
+}
+
+/// Crop a picture to `rect` (slide points, inside its whole image) so that the image stays where
+/// it is: the new box and the new crop fractions. `None` for a degenerate rectangle.
+pub fn picture_crop_to(b: deckcraft_geom::Xfrm, crop: [f64; 4], rect: deckcraft_geom::Xfrm) -> Option<(deckcraft_geom::Xfrm, [f64; 4])> {
+    let f = picture_full_rect(b, crop);
+    if !(rect.w.is_finite() && rect.h.is_finite() && f.w > 0.0 && f.h > 0.0) {
+        return None;
+    }
+    // Never past the image's own edges.
+    let x0 = rect.x.max(f.x);
+    let y0 = rect.y.max(f.y);
+    let x1 = (rect.x + rect.w).min(f.x + f.w);
+    let y1 = (rect.y + rect.h).min(f.y + f.h);
+    if x1 - x0 < 1.0 || y1 - y0 < 1.0 {
+        return None;
+    }
+    let mut l = (x0 - f.x) / f.w;
+    let mut r = (f.x + f.w - x1) / f.w;
+    let mut t = (y0 - f.y) / f.h;
+    let mut bo = (f.y + f.h - y1) / f.h;
+    if b.flip_h {
+        std::mem::swap(&mut l, &mut r);
+    }
+    if b.flip_v {
+        std::mem::swap(&mut t, &mut bo);
+    }
+    let clean = |v: f64| if v.abs() < 1e-9 { 0.0 } else { v };
+    Some((deckcraft_geom::Xfrm { x: x0, y: y0, w: x1 - x0, h: y1 - y0, ..b }, [clean(l), clean(t), clean(r), clean(bo)]))
+}
+
 /// Shapes the gallery offers beyond the preset geometry, drawn as freeforms (custom geometry, so
 /// they save to .pptx like any freeform): name, label, outline as fractions of the box.
 pub const CUSTOM_SHAPES: [(&str, &str, &[(f64, f64)]); 1] = [

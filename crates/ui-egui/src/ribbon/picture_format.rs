@@ -171,7 +171,17 @@ pub(super) fn picture_format(app: &mut SlideApp, ui: &mut Ui) {
     });
     arrange_group(app, ui);
     group(ui, |ui| {
-        let r = big_button(ui, Icon::Crop, "Crop", true);
+        // Click: crop mode (drag the black handles); the arrow: crop to a shape or by a share.
+        let picture = app.session.active().and_then(|d| {
+            let id = *d.selection.shapes.first()?;
+            matches!(d.shape(id)?.kind, deckcraft_model::ShapeKind::Picture { .. }).then_some(id)
+        });
+        let on = app.ui.crop.is_some();
+        let (main, arrow) = crate::widgets::big_button_ex(ui, Icon::Crop, "Crop", picture.is_some(), true, on);
+        if main.on_hover_text(tl!("Drag the black handles to cut the picture; Esc ends")).clicked() {
+            app.ui.crop = if on { None } else { picture };
+        }
+        let r = arrow.unwrap_or_else(|| ui.label(""));
         egui::Popup::menu(&r).show(|ui| {
             ui.label(tl!("Crop to Shape"));
             if let Some(p) = shapes_gallery(ui) {

@@ -152,6 +152,12 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.checkUpdates", "Check for Updates…", None, "{}"),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
+    (
+        "picture.cropMode",
+        "Crop Mode",
+        None,
+        "{on?: bool} — the selected picture gets crop handles (Picture Format › Crop); dragging one runs picture.cropTo",
+    ),
     ("live.dialog", "Live Session…", None, "{}"),
     ("live.start", "Start Live Session", None, "{server: url, name?: string} — share the open presentation; the answer comes later, see live.status"),
     ("live.join", "Join Live Session", None, "{server: url, name: string, code: string}"),
