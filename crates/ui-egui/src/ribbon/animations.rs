@@ -56,7 +56,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
             |i| quick.get(i).map(|a| a.1.to_string()).unwrap_or_default(),
         ) && let Some(a) = quick.get(i)
         {
-            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml()}));
+            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml(), "toggle": true}));
         }
         let more = widgets::drop_button(ui, "", vec2(14.0, 52.0), has_sel);
         egui::Popup::menu(&more).width(420.0).show(|ui| {
@@ -72,7 +72,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
                         }
                         paint_anim_tile(ui.painter(), r.shrink(2.0), a.1, a.2, true);
                         if resp.clicked() {
-                            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml()}));
+                            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml(), "toggle": true}));
                             ui.close();
                         }
                     }
@@ -86,7 +86,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
         let r = big_button(ui, Icon::EffectOptions, "Effect\nOptions", !effect_rows.is_empty());
         egui::Popup::menu(&r).show(|ui| {
             for &(o, on) in &effect_rows {
-                if ui.selectable_label(on, animation_option_label(effect, o)).clicked() {
+                if ui.selectable_label(on, tl!(&animation_option_label(effect, o))).clicked() {
                     run(app, "animation.options", json!({"option": o}));
                     ui.close();
                 }
@@ -94,7 +94,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
             ui.separator();
             for &(id, on) in &build_rows {
                 let label = if id == "byParagraph" { "By Paragraph" } else { "As One Object" };
-                if ui.selectable_label(on, label).clicked() {
+                if ui.selectable_label(on, tl!(label)).clicked() {
                     run(app, "animation.options", json!({"textBuild": id}));
                     ui.close();
                 }

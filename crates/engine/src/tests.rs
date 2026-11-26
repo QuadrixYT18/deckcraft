@@ -7633,3 +7633,22 @@ fn shape_adjust_and_quick_style_reject_invalid_index() {
     assert_eq!(s.doc().unwrap().shape(id).unwrap().style, before.style);
     s.execute("shape.adjust", &json!({"value": 0.4})).unwrap();
 }
+
+#[test]
+fn bold_off_at_the_caret_applies_to_what_is_typed_next() {
+    let mut s = session();
+    let id = s.execute("shape.insert", &json!({"preset": "rect", "rect": [10, 10, 400, 100], "text": "Hello"})).unwrap()["id"].as_u64().unwrap();
+    s.execute("edit.select", &json!({"ids": [id]})).unwrap();
+    s.execute("format.bold", &json!({"on": true})).unwrap();
+    s.execute("text.edit", &json!({"id": id, "at": [0, 5]})).unwrap();
+    // Bold off with only the caret, then type: the new text is not bold, the old text stays bold.
+    s.execute("format.bold", &json!({})).unwrap();
+    for c in [" ", "w", "o"] {
+        s.execute("text.insert", &json!({"text": c})).unwrap();
+    }
+    let sh = s.doc().unwrap().shape(deckcraft_model::ShapeId(id as u32)).cloned().unwrap();
+    let runs = &sh.text.unwrap().paragraphs[0].runs;
+    let bold_text: String = runs.iter().filter(|r| r.props.bold == Some(true)).map(|r| r.text.as_str()).collect();
+    let plain_text: String = runs.iter().filter(|r| r.props.bold != Some(true)).map(|r| r.text.as_str()).collect();
+    assert_eq!((bold_text.as_str(), plain_text.as_str()), ("Hello", " wo"), "{runs:?}");
+}

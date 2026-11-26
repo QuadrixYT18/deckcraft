@@ -17,7 +17,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Animation Styles",
             ["Animations", "Animation"],
             None,
-            "{effect: fade|fly|zoom|wipe|appear|spin|pulse|fadeOut|lines|… (animation.list), class?: entrance|emphasis|exit|path, option?, path?: [[x,y],…] or OOXML string, closed?: bool, ids?} — replaces the shapes' animations. path (motion paths): points in slide points, as offsets from where the shape sits, or the OOXML path string (slide fractions) animation.get answers",
+            "{effect: fade|fly|zoom|wipe|appear|spin|pulse|fadeOut|lines|… (animation.list), class?: entrance|emphasis|exit|path, option?, path?: [[x,y],…] or OOXML string, closed?: bool, toggle?: bool (when every shape already has this effect, remove it instead), ids?} — replaces the shapes' animations. path (motion paths): points in slide points, as offsets from where the shape sits, or the OOXML path string (slide fractions) animation.get answers",
             has_selection,
             set
         ),
@@ -278,7 +278,16 @@ pub fn default_path(effect: &str, option: &str) -> String {
 
 fn set(s: &mut Session, p: &Value) -> Result<Value> {
     let ids = targets(s, p)?;
-    let a = build(p, slide_extent(s)?)?;
+    let mut a = build(p, slide_extent(s)?)?;
+    // Choosing the effect a shape already has takes it away again (the gallery's second click).
+    if crate::cmd::bool_or(p, "toggle", false) {
+        let st = s.doc()?;
+        let anims = st.current_slide().map(|sl| sl.animations.clone()).unwrap_or_default();
+        let has = |id: &deckcraft_model::ShapeId| anims.iter().any(|x| x.shape == *id && x.effect == a.effect && x.class == a.class);
+        if !ids.is_empty() && ids.iter().all(has) {
+            a.effect = "none".into();
+        }
+    }
     s.edit(|doc, sel| {
         let sl = doc.slides.get_mut(sel.slide).ok_or_else(|| bad("animation.set", "no slide"))?;
         let sl = Arc::make_mut(sl);
@@ -555,6 +564,21 @@ mod tests {
             let left = s.execute("animation.get", &json!({})).unwrap();
             assert_eq!(left.as_array().unwrap().len(), 1);
         }
+    }
+
+    #[test]
+    fn choosing_the_same_effect_again_removes_it() {
+        let mut s = Session::with_new();
+        let id = s.execute("shape.insert", &json!({"preset": "rect", "rect": [10.0, 10.0, 100.0, 100.0]})).unwrap()["id"].as_u64().unwrap();
+        let fly = json!({"effect": "fly", "class": "entrance", "toggle": true, "ids": [id]});
+        let count = |s: &mut Session| s.execute("animation.get", &json!({})).unwrap().as_array().unwrap().len();
+        s.execute("animation.set", &fly).unwrap();
+        assert_eq!(count(&mut s), 1);
+        s.execute("animation.set", &fly).unwrap();
+        assert_eq!(count(&mut s), 0, "the second click takes it away");
+        s.execute("animation.set", &fly).unwrap();
+        s.execute("animation.set", &json!({"effect": "fade", "class": "entrance", "toggle": true, "ids": [id]})).unwrap();
+        assert_eq!(count(&mut s), 1, "another effect replaces it");
     }
 
     #[test]

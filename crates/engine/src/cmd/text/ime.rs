@@ -275,10 +275,12 @@ pub(super) fn compose(s: &mut Session, p: &Value) -> Result<Value> {
         None => {
             let st = s.doc()?;
             let (before, before_selection) = (st.doc.clone(), st.selection.clone());
+            let here = st.selection.text.clone();
+            let pending = s.typing.take().filter(|(at, _)| here.as_ref() == Some(at)).map(|(_, p)| p);
             let (start, props) = edit_text(s, |body, t| {
                 let (a, b) = t.ordered();
                 let at = ed::delete(body, a, b);
-                let props = if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) };
+                let props = pending.clone().or_else(|| if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) });
                 let c = ed::insert(body, at, &text, props.clone());
                 t.anchor = c;
                 t.caret = c;

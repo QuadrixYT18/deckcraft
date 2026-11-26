@@ -493,6 +493,9 @@ pub struct Session {
     pub(crate) untitled: u32,
     /// Format Painter: copied shape/text formatting and whether it stays on (double-click).
     pub painter: Option<(cmd::format::Painted, bool)>,
+    /// Formatting chosen with only a caret (Bold off, a font, …): what the next text typed at
+    /// exactly that caret gets. Any other caret or selection ignores it.
+    pub typing: Option<(TextSel, deckcraft_model::text::RunProps)>,
     /// Animation Painter: copied shape animations and whether it stays on (double-click).
     pub anim_painter: Option<(Vec<deckcraft_model::anim::Animation>, bool)>,
     /// Set as Default Shape: the look new shapes get.
@@ -541,6 +544,7 @@ impl Session {
             untitled: 0,
             default_look: None,
             painter: None,
+            typing: None,
             anim_painter: None,
             depth: 0,
             recovery_dir: None,

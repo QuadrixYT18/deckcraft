@@ -22,6 +22,17 @@ pub(crate) fn format_run_levels(
     let st = s.doc()?;
     if let Some(t) = st.selection.text.clone() {
         let (a, b) = format_range(st, &t);
+        // A bare caret between words: the change is for what is typed next, there.
+        if a == b && !t.is_range() {
+            let base = match &s.typing {
+                Some((at, props)) if *at == t => props.clone(),
+                _ => body_of(st, &t).map(|body| ed::props_at(body, a)).unwrap_or_default(),
+            };
+            let mut next = base;
+            f(&mut next);
+            s.typing = Some((t.clone(), next));
+        }
+        let st = s.doc()?;
         // Only the levels of the paragraphs the selected range touches.
         let levels = if a == b { Vec::new() } else { master_levels(st, &t, t.ordered()) };
         edit_text(s, |body, _| {
