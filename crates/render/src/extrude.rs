@@ -93,6 +93,22 @@ pub fn draw_contour(ctx: &mut RenderContext, outline: &BezPath, m: Affine, width
     ctx.stroke_path(outline);
 }
 
+/// The camera with its depth axis pointing the way PowerPoint shows it. The presets' turns were
+/// fitted to the front face alone, which a turn and its mirror through the face's plane (latitude
+/// and longitude negated) draw alike; their depth runs opposite ways. The off-axis isometric
+/// presets look down on the shape (their sides show above it) unless the name says bottom.
+pub fn facing(raw: &str, cam: Camera, w: f64, h: f64) -> Camera {
+    let preset = raw.find("camera prst=\"").and_then(|i| {
+        let rest = raw.get(i + "camera prst=\"".len()..)?;
+        rest.get(..rest.find('"')?)
+    });
+    let explicit = raw.contains("<a:rot") && raw.find("<a:rot") < raw.find("lightRig");
+    let Some(name) = preset.filter(|n| n.starts_with("isometricOffAxis") && !explicit) else { return cam };
+    let from_above = !name.contains("Bottom");
+    let y = back_offset(&cam, 1.0, w, h).y;
+    if y.abs() > 1e-6 && (y < 0.0) != from_above { Camera { lat: -cam.lat, lon: -cam.lon, ..cam } } else { cam }
+}
+
 /// The camera's view of the depth axis: where the back face sits relative to the front face, in
 /// the turned shape's space (the space `camera::affine` maps into).
 pub fn back_offset(c: &Camera, depth: f64, w: f64, h: f64) -> Vec2 {
@@ -184,6 +200,15 @@ mod tests {
         assert_eq!(e.color, Some(ColorRef::rgb(Rgba::rgb(0xC0, 0, 0))));
         assert!(from_raw(r#"<a:sp3d extrusionH="381000"/>"#).is_none(), "no scene: drawn flat");
         assert!(from_raw(r#"<a:scene3d/><a:sp3d/>"#).is_none());
+    }
+
+    #[test]
+    fn off_axis_isometric_sides_show_above_the_shape() {
+        let raw =
+            r#"<a:scene3d><a:camera prst="isometricOffAxis2Left"/><a:lightRig rig="threePt" dir="t"/></a:scene3d><a:sp3d extrusionH="381000"/>"#;
+        let cam = camera::from_raw(raw).unwrap();
+        let o = back_offset(&facing(raw, cam, 240.0, 145.0), 30.0, 240.0, 145.0);
+        assert!(o.y < 0.0 && o.x > 0.0, "PowerPoint shows the depth up and to the right: {o:?}");
     }
 
     #[test]

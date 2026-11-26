@@ -1880,6 +1880,40 @@ fn shape_to(s: &deckcraft_model::Shape) -> craft_pptx::Shape {
 }
 
 fn shape_from(s: craft_pptx::Shape) -> deckcraft_model::Shape {
+    let mut out = shape_from_file(s);
+    if let Some(scene) = out.diagram.as_ref().and_then(|d| d.style_xml.as_deref()).and_then(diagram_scene) {
+        give_scene(&mut out, &scene);
+    }
+    out
+}
+
+/// The 3-D scene a SmartArt style sets for the whole diagram (`dgm:styleDef/dgm:scene3d`, before
+/// the per-label styles) as `a:scene3d`, when it turns the camera.
+fn diagram_scene(style_xml: &str) -> Option<String> {
+    let head = &style_xml[..style_xml.find("<dgm:styleLbl").unwrap_or(style_xml.len())];
+    let start = head.find("<dgm:scene3d>")? + "<dgm:scene3d>".len();
+    let inner = &head[start..start + head[start..].find("</dgm:scene3d>")?];
+    (inner.contains("<a:camera") && !inner.contains("\"orthographicFront\"")).then(|| format!("<a:scene3d>{inner}</a:scene3d>"))
+}
+
+/// Put `scene` on every shape under `sh` that has 3-D depth (`sp3d`) but no scene of its own:
+/// PowerPoint sees a SmartArt's shapes through the style's camera.
+fn give_scene(sh: &mut deckcraft_model::Shape, scene: &str) {
+    if let Some(fx) = sh.effects.as_mut()
+        && let Some(raw) = fx.raw3d.as_mut()
+        && raw.contains("sp3d")
+        && !raw.contains("scene3d")
+    {
+        raw.insert_str(0, scene);
+    }
+    if let deckcraft_model::ShapeKind::Group { children, .. } = &mut sh.kind {
+        for c in children {
+            give_scene(c, scene);
+        }
+    }
+}
+
+fn shape_from_file(s: craft_pptx::Shape) -> deckcraft_model::Shape {
     deckcraft_model::Shape {
         id: shape_id_from(s.id),
         name: s.name,
