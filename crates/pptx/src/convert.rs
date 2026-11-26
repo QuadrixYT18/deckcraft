@@ -1988,6 +1988,21 @@ fn comment_from(c: craft_pptx::Comment) -> deckcraft_model::Comment {
     }
 }
 
+/// The SmartArt group (at any depth) that `id` is a part of.
+fn diagram_owner(shapes: &[deckcraft_model::Shape], id: deckcraft_model::ShapeId) -> Option<deckcraft_model::ShapeId> {
+    for sh in shapes {
+        if let deckcraft_model::ShapeKind::Group { children, .. } = &sh.kind {
+            if sh.diagram.is_some() && children.iter().any(|c| c.id == id) {
+                return Some(sh.id);
+            }
+            if let Some(g) = diagram_owner(children, id) {
+                return Some(g);
+            }
+        }
+    }
+    None
+}
+
 fn slide_to(s: &deckcraft_model::Slide) -> craft_pptx::Slide {
     craft_pptx::Slide {
         id: slide_id_to(s.id),
@@ -1998,7 +2013,18 @@ fn slide_to(s: &deckcraft_model::Slide) -> craft_pptx::Slide {
         hidden: s.hidden,
         show_master_shapes: s.show_master_shapes,
         transition: s.transition.as_ref().map(transition_to),
-        animations: s.animations.iter().map(animation_to).collect(),
+        animations: s
+            .animations
+            .iter()
+            .map(|a| {
+                // A SmartArt part's effect is written on the graphic itself: the parts are not
+                // shapes of the slide in the file.
+                match diagram_owner(&s.shapes, a.shape) {
+                    Some(g) => animation_to(&deckcraft_model::anim::Animation { shape: g, ..a.clone() }),
+                    None => animation_to(a),
+                }
+            })
+            .collect(),
         notes: text_body_to(&s.notes),
         has_notes_slide: s.has_notes_slide,
         comments: s.comments.iter().map(comment_to).collect(),

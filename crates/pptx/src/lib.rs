@@ -9,6 +9,7 @@
 
 mod cfb;
 mod convert;
+mod dgm_anim;
 mod xml;
 
 pub use craft_pptx::MAX_TAG_BYTES;
@@ -335,7 +336,8 @@ fn has_media_shapes(shapes: &[Shape]) -> bool {
 fn post_import_timing(bytes: &[u8], pres: &mut Presentation) {
     let need_builds = has_unfolded_paragraph_builds(pres);
     let need_media = pres.slides.iter().any(|s| has_media_shapes(&s.shapes));
-    if !need_builds && !need_media {
+    let need_parts = pres.slides.iter().any(|s| s.animations.iter().any(|a| s.shapes.iter().any(|sh| sh.id == a.shape && sh.diagram.is_some())));
+    if !need_builds && !need_media && !need_parts {
         return;
     }
     let Ok(mut pkg) = craft_opc::LazyPackage::open(bytes, &craft_pptx::LIMITS) else {
@@ -359,6 +361,15 @@ fn post_import_timing(bytes: &[u8], pres: &mut Presentation) {
         let Ok(Some(sb)) = pkg.read_limited(target, craft_pptx::MAX_XML_PART as u64) else { continue };
         let Ok(se) = craft_drawingml::xmlx::parse(&sb) else { continue };
         let Some(timing) = se.child(craft_xml::Local("timing")) else { continue };
+        if need_parts {
+            let slide_rels = pkg.rels(target).unwrap_or_default();
+            let resolve = |rid: &str| slide_rels.target(rid).map(str::to_string);
+            let mut read = |path: &str| -> Option<craft_xml::El> {
+                let bytes = pkg.read_limited(path, craft_pptx::MAX_XML_PART as u64).ok()??;
+                craft_drawingml::xmlx::parse(&bytes).ok()
+            };
+            dgm_anim::retarget(std::sync::Arc::make_mut(slide_arc), timing, &se, &resolve, &mut read);
+        }
         if need_media && has_media_shapes(&slide_arc.shapes) {
             apply_media_timing(timing, &mut std::sync::Arc::make_mut(slide_arc).shapes);
         }
