@@ -165,6 +165,7 @@ fn dlg_header_footer(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     let num_on = check(ui, d, "Slide number", "num", hf.slide_number);
     let foot = check(ui, d, "Footer", "footer", hf.footer);
     field(ui, d, "  Footer text:", "footerText", &hf.footer_text);
+    ui.label(egui::RichText::new(tl!("{date} in the footer text shows today's date")).small().weak());
     let hide = check(ui, d, "Don't show on title slide", "hide", hf.hide_on_title);
     ui.add_space(6.0);
     let mut apply_all = false;

@@ -103,6 +103,8 @@ pub(super) fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
             hf.hide_on_title = v;
         }
         let hf = hf.clone();
+        // The language a `{date}` in the footer is written in: the deck's own text's.
+        let lang = deck_lang(doc);
         let date_given = str_param(p, "dateText").is_some();
         let format_given = str_param(p, "dateFormat").is_some();
         let all = bool_or(p, "all", true);
@@ -159,7 +161,7 @@ pub(super) fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
                                 ..Default::default()
                             },
                             PhType::Date => TextBody::from_text(&hf.date_text),
-                            _ => TextBody::from_text(&hf.footer_text),
+                            _ => footer_body(&hf.footer_text, &hf.date_format, lang.as_deref()),
                         };
                         sl.shapes.push(Shape {
                             id: new_ids.get(n).copied().unwrap_or_default(),
@@ -171,7 +173,7 @@ pub(super) fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
                     }
                     (Some(pos), true) if k == PhType::Footer => {
                         if let Some(sh) = sl.shapes.get_mut(pos) {
-                            sh.text = Some(TextBody::from_text(&hf.footer_text));
+                            sh.text = Some(footer_body(&hf.footer_text, &hf.date_format, lang.as_deref()));
                         }
                     }
                     (Some(pos), true) if k == PhType::Date && (date_given || format_given) => {
@@ -268,6 +270,61 @@ fn set_date(sh: &mut Shape, fixed: &str, format: &str, format_given: bool) {
     sh.text = Some(TextBody { paragraphs: vec![para], ..sh.text.clone().unwrap_or_default() });
 }
 
+/// The words that stand for today's date in footer text.
+const DATE_TOKENS: [&str; 2] = ["{date}", "{datum}"];
+
+/// The footer text as a text body, each `{date}` (or `{datum}`) in it an automatic date field in
+/// the deck's date format and language, so "DB Fernverkehr | {date}" shows today's date.
+fn footer_body(text: &str, format: &str, lang: Option<&str>) -> TextBody {
+    let mut body = TextBody::from_text(text);
+    for para in &mut body.paragraphs {
+        let mut runs = vec![];
+        for run in std::mem::take(&mut para.runs) {
+            if !matches!(run.kind, RunKind::Text) || !DATE_TOKENS.iter().any(|t| run.text.to_lowercase().contains(t)) {
+                runs.push(run);
+                continue;
+            }
+            let mut rest = run.text.as_str();
+            while let Some((at, len)) = DATE_TOKENS.iter().filter_map(|t| rest.to_lowercase().find(t).map(|at| (at, t.len()))).min() {
+                if at > 0 {
+                    runs.push(Run { text: rest[..at].into(), props: run.props.clone(), kind: RunKind::Text });
+                }
+                let mut props = run.props.clone();
+                if props.lang.is_none() {
+                    props.lang = lang.map(str::to_string);
+                }
+                let kind = date_kind(format);
+                let shown = deckcraft_text::datetime::DateTime::now_local()
+                    .and_then(|now| deckcraft_text::datetime::field_text(kind, props.lang.as_deref(), now))
+                    .unwrap_or_else(|| date_now(format));
+                runs.push(Run { text: shown, props, kind: RunKind::Field { field: kind.into() } });
+                rest = &rest[at + len..];
+            }
+            if !rest.is_empty() {
+                runs.push(Run { text: rest.into(), props: run.props.clone(), kind: RunKind::Text });
+            }
+        }
+        para.runs = runs;
+    }
+    body
+}
+
+/// The language of the first text run in the deck that names one.
+fn deck_lang(doc: &deckcraft_model::Presentation) -> Option<String> {
+    let mut found = None;
+    for sl in &doc.slides {
+        deckcraft_model::walk(&sl.shapes, &mut |sh, _| {
+            if found.is_none() {
+                found = sh.text.as_ref().and_then(|t| t.paragraphs.iter().flat_map(|p| &p.runs).find_map(|r| r.props.lang.clone()));
+            }
+        });
+        if found.is_some() {
+            break;
+        }
+    }
+    found
+}
+
 /// Today's local date as a `datetime1` field shows it (M/D/YYYY): the saved text of a new date
 /// field. Empty where there is no clock (wasm).
 pub fn today() -> String {
@@ -332,6 +389,30 @@ mod footer_date_tests {
         assert_eq!(footer(&s, 1), line);
         s.execute("design.headerFooter", &json!({"date": false, "footer": true, "footerText": "DB Fernverkehr |", "all": true})).unwrap();
         assert_eq!(footer(&s, 1), "DB Fernverkehr |");
+    }
+
+    #[test]
+    fn date_in_the_footer_text_becomes_todays_date() {
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({"title": "Aufbau"})).unwrap();
+        s.execute("design.headerFooter", &json!({"footer": true, "footerText": "DB Fernverkehr | {date}", "all": true})).unwrap();
+        let line = footer(&s, 1);
+        assert!(line.starts_with("DB Fernverkehr | ") && !line.contains('{'), "{line:?}");
+        // It is a date field (it updates), and the date checkbox adds no second date.
+        let d = &s.doc().unwrap().doc;
+        let foot = d.slides[1].shapes.iter().find(|x| x.ph_type() == Some(PhType::Footer)).unwrap();
+        let fields = foot
+            .text
+            .as_ref()
+            .unwrap()
+            .paragraphs
+            .iter()
+            .flat_map(|p| &p.runs)
+            .filter(|r| matches!(r.kind, deckcraft_model::text::RunKind::Field { .. }))
+            .count();
+        assert_eq!(fields, 1);
+        s.execute("design.headerFooter", &json!({"date": true, "footer": true, "footerText": "DB Fernverkehr | {Datum}", "all": true})).unwrap();
+        assert_eq!(footer(&s, 1), line);
     }
 }
 
