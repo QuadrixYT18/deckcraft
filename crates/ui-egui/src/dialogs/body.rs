@@ -145,7 +145,10 @@ fn dlg_header_footer(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     let fmt_now = if hf.date_format.is_empty() { "datetime1".to_string() } else { hf.date_format.clone() };
     // Not `d.get`: that stores the default as if the user had picked it.
     let fmt = d.fields.get("dateFormat").cloned().unwrap_or_else(|| fmt_now.clone());
-    let rows = date_rows("en-US");
+    // The samples in the language the slide's text is in: a date field shows in its run's
+    // language, so a German deck shows 26.11.2026, not the US order.
+    let lang = super::selected_language(app).0;
+    let rows = date_rows(&lang);
     let label = rows.iter().find(|(k, _)| *k == fmt).map(|(_, s)| s.clone()).unwrap_or_else(|| fmt.clone());
     ui.add_enabled_ui(date && automatic, |ui| {
         ui.horizontal(|ui| {
