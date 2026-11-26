@@ -185,6 +185,37 @@ pub(super) fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
                     _ => {}
                 }
             }
+            // A layout without a date placeholder (many corporate templates put the date in the
+            // footer line): the date goes at the end of the footer instead of being dropped.
+            if want(PhType::Date)
+                && !sl.shapes.iter().any(|x| x.ph_type() == Some(PhType::Date))
+                && let Some(foot) = sl.shapes.iter_mut().find(|x| x.ph_type() == Some(PhType::Footer))
+            {
+                let body = foot.text.get_or_insert_with(TextBody::default);
+                let has_date = body
+                    .paragraphs
+                    .iter()
+                    .flat_map(|p| &p.runs)
+                    .any(|r| matches!(&r.kind, RunKind::Field { field } if deckcraft_text::datetime::is_date_field(field)));
+                if !has_date {
+                    if body.paragraphs.is_empty() {
+                        body.paragraphs.push(deckcraft_model::Paragraph::default());
+                    }
+                    if let Some(para) = body.paragraphs.last_mut() {
+                        let props = para.runs.last().map(|r| r.props.clone()).unwrap_or_default();
+                        let sep = if para.text().trim().is_empty() || para.text().ends_with(' ') { "" } else { " " };
+                        if !sep.is_empty() {
+                            para.runs.push(Run { text: sep.into(), props: props.clone(), kind: RunKind::Text });
+                        }
+                        let date = if hf.date_text.is_empty() {
+                            Run { text: date_now(&hf.date_format), props, kind: RunKind::Field { field: date_kind(&hf.date_format).into() } }
+                        } else {
+                            Run { text: hf.date_text.clone(), props, kind: RunKind::Text }
+                        };
+                        para.runs.push(date);
+                    }
+                }
+            }
         }
         Ok(())
     })?;
@@ -263,6 +294,44 @@ pub fn civil(z: i64) -> (i64, u32, u32) {
             (i64::try_from(y).unwrap_or(if y < 0 { i64::MIN } else { i64::MAX }), d.month(), d.day())
         }
         None => (1970, 1, 1),
+    }
+}
+
+#[cfg(test)]
+mod footer_date_tests {
+    use std::sync::Arc;
+
+    use deckcraft_model::PhType;
+    use serde_json::json;
+
+    use crate::Session;
+
+    /// The footer line of slide `i`.
+    fn footer(s: &Session, i: usize) -> String {
+        let d = &s.doc().unwrap().doc;
+        d.slides[i].shapes.iter().find(|x| x.ph_type() == Some(PhType::Footer)).and_then(|x| x.text.as_ref()).map(|t| t.text()).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_layout_without_a_date_place_gets_the_date_in_the_footer() {
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({"title": "Aufbau"})).unwrap();
+        // A corporate template: the layouts have a footer but no date placeholder.
+        let st = s.doc_mut().unwrap();
+        let doc = Arc::make_mut(&mut st.doc);
+        for m in &mut doc.masters {
+            for l in &mut Arc::make_mut(m).layouts {
+                l.shapes.retain(|x| x.ph_type() != Some(PhType::Date));
+            }
+        }
+        s.execute("design.headerFooter", &json!({"date": true, "footer": true, "footerText": "DB Fernverkehr |", "all": true})).unwrap();
+        let line = footer(&s, 1);
+        assert!(line.starts_with("DB Fernverkehr | ") && line.len() > "DB Fernverkehr | ".len(), "{line:?}");
+        // Applying again doesn't add a second date; turning the date off takes it away.
+        s.execute("design.headerFooter", &json!({"date": true, "footer": true, "footerText": "DB Fernverkehr |", "all": true})).unwrap();
+        assert_eq!(footer(&s, 1), line);
+        s.execute("design.headerFooter", &json!({"date": false, "footer": true, "footerText": "DB Fernverkehr |", "all": true})).unwrap();
+        assert_eq!(footer(&s, 1), "DB Fernverkehr |");
     }
 }
 
