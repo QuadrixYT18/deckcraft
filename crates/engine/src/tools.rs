@@ -236,6 +236,18 @@ enum Drag {
 }
 
 /// Shape-gallery names that draw a freeform path instead of a preset.
+/// Shapes the gallery offers beyond the preset geometry, drawn as freeforms (custom geometry, so
+/// they save to .pptx like any freeform): name, label, outline as fractions of the box.
+pub const CUSTOM_SHAPES: [(&str, &str, &[(f64, f64)]); 1] = [
+    // A pointer arrowhead with a notch in its base (as Lucide's navigation-2 outline).
+    ("navigationArrow", "Arrow: Navigation", &[(0.5, 0.0), (1.0, 1.0), (0.5, 0.79), (0.0, 1.0)]),
+];
+
+/// The outline of custom shape `name` in a box, or `None` when it isn't one.
+pub fn custom_shape(name: &str) -> Option<&'static [(f64, f64)]> {
+    CUSTOM_SHAPES.iter().find(|c| c.0 == name).map(|c| c.2)
+}
+
 pub const FREEFORM_TOOLS: [(&str, &str); 3] = [("curve", "Curve"), ("freeform", "Freeform: Shape"), ("scribble", "Freeform: Scribble")];
 
 /// Draw Table's pencil and eraser, as `ToolKind::Shape` presets (Insert › Table › Draw Table).
