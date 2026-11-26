@@ -115,6 +115,7 @@ pub(super) fn table_design(app: &mut SlideApp, ui: &mut Ui) {
             ] {
                 let mut p = pen.clone();
                 p["which"] = json!(which);
+                p["toggle"] = json!(true);
                 menu_item(app, ui, Icon::Borders, label, "table.borders", p);
             }
             ui.separator();

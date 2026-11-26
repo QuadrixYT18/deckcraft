@@ -4410,6 +4410,15 @@ fn table_borders_margins_and_cell_alignment() {
             .all(|c| c.diag_down.is_none() && c.borders.iter().all(|b| b.as_ref().is_some_and(|l| l.fill == Some(deckcraft_model::Fill::None))))
     );
     assert!(s.execute("table.borders", &json!({"id": id, "which": "sideways"})).is_err());
+    // Choosing a border that is already there (toggle, as the ribbon does) takes it away again.
+    let visible = |s: &Session| table(s).rows[0].cells[0].borders[0].as_ref().is_some_and(|l| l.fill != Some(deckcraft_model::Fill::None));
+    let outside = json!({"id": id, "which": "outside", "toggle": true});
+    s.execute("table.borders", &outside).unwrap();
+    assert!(visible(&s));
+    s.execute("table.borders", &outside).unwrap();
+    assert!(!visible(&s), "the second click removes the outside borders");
+    s.execute("table.borders", &outside).unwrap();
+    assert!(visible(&s), "and the third puts them back");
     // Margins and vertical alignment.
     s.execute("table.cellMargins", &json!({"id": id, "preset": "wide", "cells": [[0, 0]]})).unwrap();
     s.execute("table.cellMargins", &json!({"id": id, "preset": "none", "left": 5.0, "cells": [[0, 1]]})).unwrap();

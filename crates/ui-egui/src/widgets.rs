@@ -475,6 +475,36 @@ pub fn color_grid(ui: &mut Ui, scheme: &ColorScheme, none_label: Option<&str>) -
     {
         out = Some(None);
     }
+    // More colours: a palette of hues in light to dark steps and greys, and a picker for any colour.
+    egui::CollapsingHeader::new(tl!("More Colors")).id_salt(ui.scope_id().with("more")).show(ui, |ui| {
+        egui::Grid::new("more_colors").spacing(vec2(3.0, 1.0)).show(ui, |ui| {
+            for light in [0.85, 0.72, 0.58, 0.45, 0.33, 0.22] {
+                for k in 0..12 {
+                    let c = hsl(k as f64 * 30.0, 0.75, light);
+                    if sw(ui, c, &format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b)) {
+                        out = Some(Some(ColorRef::rgb(c)));
+                    }
+                }
+                ui.end_row();
+            }
+            for k in 0..12 {
+                let v = (255.0 * k as f64 / 11.0).round() as u8;
+                let c = Rgba::rgb(v, v, v);
+                if sw(ui, c, &format!("#{v:02X}{v:02X}{v:02X}")) {
+                    out = Some(Some(ColorRef::rgb(c)));
+                }
+            }
+            ui.end_row();
+        });
+        ui.add_space(4.0);
+        let pick_id = ui.scope_id().with("picked");
+        let mut picked: egui::Color32 = ui.data_mut(|d| d.get_temp(pick_id).unwrap_or(egui::Color32::from_rgb(192, 0, 0)));
+        egui::color_picker::color_picker_color32(ui, &mut picked, egui::color_picker::Alpha::Opaque);
+        ui.data_mut(|d| d.insert_temp(pick_id, picked));
+        if ui.button(tl!("Use this colour")).clicked() {
+            out = Some(Some(ColorRef::rgb(Rgba::rgb(picked.r(), picked.g(), picked.b()))));
+        }
+    });
     // "More Colors…": a hex field.
     let id = ui.scope_id().with("hex");
     let mut hex: String = ui.data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
@@ -614,6 +644,24 @@ pub fn drop_button(ui: &mut Ui, label: &str, size: egui::Vec2, enabled: bool) ->
     let col = if enabled { t.text_dim } else { t.text_faint };
     chevron(ui.painter(), egui::pos2(r.rect.max.x - 8.0, r.rect.center().y), 3.0, col);
     r
+}
+
+/// A colour from hue (degrees), saturation and lightness (0–1).
+fn hsl(h: f64, s: f64, l: f64) -> Rgba {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let hp = (h.rem_euclid(360.0)) / 60.0;
+    let x = c * (1.0 - (hp % 2.0 - 1.0).abs());
+    let (r, g, b) = match hp as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = l - c / 2.0;
+    let to = |v: f64| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+    Rgba::rgb(to(r), to(g), to(b))
 }
 
 #[cfg(test)]

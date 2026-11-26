@@ -161,7 +161,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Crop",
             ["Picture Format", "Size"],
             None,
-            "{rect: [x,y,w,h] pt, the part of the picture to keep, ids?}: the image stays where it is; the box shrinks (or grows back, up to the whole image) to `rect`",
+            "{rect: [x,y,w,h] pt to keep (the image stays in place), ids?}",
             has_selection,
             crop_to
         ),

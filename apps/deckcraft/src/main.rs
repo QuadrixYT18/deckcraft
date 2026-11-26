@@ -26,9 +26,9 @@ mod control_server;
 mod display;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
+mod launch_profile;
 mod live_net;
 mod local_server;
-mod launch_profile;
 mod logging;
 mod nightly_session;
 #[cfg(not(target_arch = "wasm32"))]
