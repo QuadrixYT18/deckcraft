@@ -584,6 +584,7 @@ fn looks_like_font(p: &std::path::Path) -> bool {
 }
 
 /// TrueType (`00 01 00 00`, `true`), OpenType (`OTTO`) or a collection (`ttcf`).
+#[cfg(not(target_arch = "wasm32"))]
 fn is_font_signature(head: [u8; 4]) -> bool {
     matches!(&head, [0, 1, 0, 0] | b"OTTO" | b"true" | b"ttcf")
 }
@@ -1776,7 +1777,7 @@ mod font_dir_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod signature_tests {
     #[test]
     fn font_signatures_are_told_from_other_files() {
