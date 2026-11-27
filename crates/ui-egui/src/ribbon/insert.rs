@@ -75,18 +75,7 @@ pub(super) fn insert(app: &mut SlideApp, ui: &mut Ui) {
         let r = big_button(ui, Icon::SmartArt, "Diagram", enabled(app, "insert.smartArt"));
         egui::Popup::menu(&r).show(|ui| diagram_menu(app, ui));
         let r = big_button(ui, Icon::Chart, "Chart", enabled(app, "insert.chart"));
-        egui::Popup::menu(&r).show(|ui| {
-            for k in chart_menu_types() {
-                if k.is_none() {
-                    ui.separator();
-                }
-                if let Some(k) = k
-                    && ui.button(k.label()).clicked()
-                {
-                    run(app, "insert.chart", json!({"type": format!("{k:?}")}));
-                }
-            }
-        });
+        egui::Popup::menu(&r).show(|ui| chart_menu(app, ui));
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::Zoom, "Zoom", enabled(app, "insert.zoom"));
@@ -306,5 +295,35 @@ fn diagram_menu(app: &mut SlideApp, ui: &mut Ui) {
     if ui.button(tl!("More Diagrams…")).clicked() {
         run(app, "app.dialog", json!({"id": "smartart"}));
         ui.close();
+    }
+}
+
+/// Insert › Chart: the chart types by kind, each a submenu.
+fn chart_menu(app: &mut SlideApp, ui: &mut Ui) {
+    use deckcraft_model::chart::ChartType as T;
+    const KINDS: [(&str, &[T]); 11] = [
+        ("Column charts", &[T::Column, T::StackedColumn, T::PercentColumn]),
+        ("Bar", &[T::Bar, T::StackedBar, T::PercentBar]),
+        ("Line", &[T::Line, T::LineMarkers, T::StackedLine]),
+        ("Area", &[T::Area, T::StackedArea]),
+        ("Pie", &[T::Pie, T::Doughnut]),
+        ("Scatter", &[T::Scatter, T::Bubble]),
+        ("Hierarchy", &[T::Treemap, T::Sunburst]),
+        ("Statistic charts", &[T::Histogram, T::Pareto, T::BoxWhisker]),
+        ("Waterfall", &[T::Waterfall, T::Funnel, T::Stock]),
+        ("Radar", &[T::Radar, T::FilledRadar, T::Surface]),
+        ("Combo chart", &[T::Combo, T::RegionMap]),
+    ];
+    for (kind, types) in KINDS {
+        ui.menu_button(tl!(kind), |ui| {
+            for k in types {
+                // "Combo" alone reads as a combo box in German.
+                let label = if *k == T::Combo { tl!("Combo chart") } else { tl!(k.label()) };
+                if ui.button(label).clicked() {
+                    run(app, "insert.chart", json!({"type": format!("{k:?}")}));
+                    ui.close();
+                }
+            }
+        });
     }
 }
