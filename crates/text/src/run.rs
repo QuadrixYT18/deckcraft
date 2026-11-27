@@ -23,6 +23,8 @@ pub struct GlyphRun {
     /// Opacity of the fill on top of `color`'s own alpha (0 for no fill).
     pub alpha: f64,
     pub gradient: Option<std::sync::Arc<deckcraft_model::style::Gradient>>,
+    /// A pattern fill: (preset, foreground, background), colours resolved.
+    pub pattern: Option<std::sync::Arc<(String, Rgba, Rgba)>>,
     /// Shadow and glow behind the glyphs (`a:rPr/a:effectLst`).
     pub effects: Option<RunEffects>,
     /// East Asian vertical text (`eaVert`): each glyph stands upright, turned a quarter turn

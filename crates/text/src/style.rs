@@ -47,6 +47,7 @@ pub(crate) struct Style {
     pub(crate) outline: Option<(Rgba, f64)>,
     pub(crate) link: bool,
     pub(crate) gradient: Option<std::sync::Arc<deckcraft_model::style::Gradient>>,
+    pub(crate) pattern: Option<std::sync::Arc<(String, Rgba, Rgba)>>,
     pub(crate) effects: Option<RunEffects>,
     /// "Regular", "Bold"… for the slot and fallback faces.
     pub(crate) style_name: &'static str,
@@ -140,6 +141,10 @@ pub(crate) fn make_style(ctx: &Ctx, r: &RunProps, scale: f64, prompt: Option<Rgb
     let fake_bold = bold && face.weight < 550.0;
     let fake_italic = italic && !face.italic;
     let size = (r.size.unwrap_or(18.0) * scale).clamp(0.5, 4000.0);
+    let pattern = match &r.fill {
+        Some(Fill::Pattern(pf)) => Some(std::sync::Arc::new((pf.preset.clone(), ctx.color(&pf.fg, None), ctx.color(&pf.bg, None)))),
+        _ => None,
+    };
     let (mut color, alpha, gradient) = match &r.fill {
         // The resolved colour carries the fill's transparency (`a:alpha`): it is applied once.
         Some(Fill::Solid { color }) => (ctx.color(color, None), 1.0, None),
@@ -195,6 +200,7 @@ pub(crate) fn make_style(ctx: &Ctx, r: &RunProps, scale: f64, prompt: Option<Rgb
         outline,
         link: r.link.is_some(),
         gradient,
+        pattern,
         effects: run_effects(ctx, r, scale),
         style_name: style_name(bold, italic),
         lang: r.lang.clone().filter(|l| !l.is_empty()),

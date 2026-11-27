@@ -379,7 +379,16 @@ fn draw_glyph_with(
     }
     let skew = if run.fake_italic { Affine::new([1.0, 0.0, -0.2, 1.0, 0.0, 0.0]) } else { Affine::IDENTITY };
     ctx.set_transform(at * skew * Affine::scale(k));
-    if let Some((g, to_text)) = fill
+    if let Some(p) = run.pattern.as_ref()
+        && alpha > 0.0
+        && fill.is_none()
+    {
+        // The pattern's cells are laid out in text space, so they keep their size on the slide.
+        let (name, fg, bg) = p.as_ref();
+        let outline = (skew * Affine::scale(k)) * (*path).clone();
+        crate::pattern::fill(ctx, name, *fg, *bg, alpha, &outline, at);
+        ctx.set_transform(at * skew * Affine::scale(k));
+    } else if let Some((g, to_text)) = fill
         && alpha > 0.0
     {
         ctx.set_paint(g.clone());
