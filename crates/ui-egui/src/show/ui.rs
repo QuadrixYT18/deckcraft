@@ -503,6 +503,9 @@ fn draw_transition(show: &mut Show, f: &Fr, sl: &Sl, painter: &egui::Painter, te
                 tr.old = Some(crate::textures::upload(ctx, "trans-old", ci));
             }
             let aspect = doc.slide_size.width / doc.slide_size.height.max(1.0);
+            // As PowerPoint: the transition plays inside the slide; the bars around a slide that
+            // doesn't fill the screen stay black, so a pushed slide never shows in them.
+            let painter = painter.with_clip_rect(srect.intersect(painter.clip_rect()));
             let part = |k: usize| tr.parts.as_ref().and_then(|p| p.get(k).cloned().flatten());
             let parts = [part(0), part(1), part(2), part(3)];
             for l in transition_layers(&tr.kind, &tr.option, tr.reverse, p, aspect) {
