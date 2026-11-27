@@ -267,6 +267,27 @@ impl SlideApp {
                 #[cfg(target_arch = "wasm32")]
                 return Err("updates are handled by the browser: reload the page".into());
             }
+            "app.updateFromSource" => {
+                // The checkout this app was built from: its update script rebuilds and reinstalls.
+                #[cfg(target_os = "macos")]
+                {
+                    let script = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../server/update.command"));
+                    if !script.is_file() {
+                        return Err(format!(
+                            "no update script at {} (this DeckCraft wasn't built from a source folder on this Mac)",
+                            script.display()
+                        ));
+                    }
+                    std::process::Command::new("open")
+                        .args(["-a", "Terminal"])
+                        .arg(script)
+                        .spawn()
+                        .map_err(|e| format!("could not open Terminal: {e}"))?;
+                    return Ok(json!({"started": true}));
+                }
+                #[cfg(not(target_os = "macos"))]
+                return Err("Update DeckCraft… builds the macOS app; elsewhere, pull and build with cargo".into());
+            }
             "app.palette" => self.palette = Some((String::new(), 0)),
             "app.preferences" => self.dialog = Some(dialogs::Dialog::new("preferences")),
             "app.language" => {

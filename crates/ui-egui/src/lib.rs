@@ -151,6 +151,12 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ),
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.checkUpdates", "Check for Updates…", None, "{}"),
+    (
+        "app.updateFromSource",
+        "Update DeckCraft…",
+        None,
+        "{} — macOS, built from a source folder: opens server/update.command in Terminal (quits, fetches main, builds, installs, reopens)",
+    ),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
     (
         "picture.cropMode",
