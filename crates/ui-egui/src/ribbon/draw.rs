@@ -11,9 +11,25 @@ pub(super) fn draw(app: &mut SlideApp, ui: &mut Ui) {
             app.session.set_tool(ToolKind::Select);
         }
         let er = matches!(&cur, ToolKind::Ink { mode, .. } if mode == "eraser");
-        if big_button_ex(ui, Icon::Eraser, "Eraser", true, false, er).0.clicked() {
-            app.session.set_tool(ToolKind::Ink { mode: "eraser".into(), color: deckcraft_color::Rgba::BLACK, width: 2.0 });
-        }
+        let eraser = |w: f64| ToolKind::Ink { mode: "eraser".into(), color: deckcraft_color::Rgba::BLACK, width: w };
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let (r, _) = big_button_ex(ui, Icon::Eraser, "Eraser", true, false, er);
+            if r.clicked() {
+                app.session.set_tool(eraser(app.ui.eraser_width));
+            }
+            let arrow = crate::widgets::drop_button(ui, "", egui::vec2(r.rect.width(), 12.0), true);
+            egui::Popup::menu(&arrow).show(|ui| {
+                ui.label(tl!("Eraser size"));
+                for (label, w) in [("Small", 4.0), ("Medium", 12.0), ("Large", 30.0)] {
+                    if ui.selectable_label((app.ui.eraser_width - w).abs() < 1e-6, tl!(label)).clicked() {
+                        app.ui.eraser_width = w;
+                        app.session.set_tool(eraser(w));
+                        ui.close();
+                    }
+                }
+            });
+        });
     });
     group(ui, |ui| {
         if app.ui.pens.is_empty() {

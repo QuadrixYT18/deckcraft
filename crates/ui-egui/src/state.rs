@@ -85,6 +85,8 @@ pub struct UiState {
     pub swap_displays: bool,
     /// The Draw tab's pens, in order: each one's colour and width can be changed.
     pub pens: Vec<Pen>,
+    /// The eraser's width in points (Draw › Eraser size).
+    pub eraser_width: f64,
     pub ui_scale: f32,
     /// Format Shape pane: tab (`fill`, `effects`, `size`, `picture`, `text`).
     pub format_tab: String,
@@ -130,6 +132,7 @@ impl Default for UiState {
             show_keep_cursor: false,
             swap_displays: false,
             pens: Pen::defaults(),
+            eraser_width: 12.0,
             ui_scale: 1.0,
             format_tab: "fill".into(),
             smartart_row: 0,
