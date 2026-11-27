@@ -1,8 +1,8 @@
 use super::arrange::arrange_menu;
 use super::galleries::{cref_param, effects_menu, outline_menu, quick_styles, shapes_gallery, smartart_gallery};
 use super::{
-    Color32, CornerRadius, Icon, Rect, Sense, SlideApp, Stroke, Tokens, Ui, Value, big, big_button, big_button_ex, color_split, dropdown, enabled,
-    fmt_state, group, icon_toggle, json, pos2, rows, run, scheme, small, small_button, small_button_ex, small_button_named, toggle, vec2, widgets,
+    Color32, CornerRadius, Icon, Rect, Sense, SlideApp, Stroke, Tokens, Ui, Value, big, big_button, big_button_ex, color_split, enabled, fmt_state,
+    group, icon_toggle, json, pos2, rows, run, scheme, small, small_button, small_button_ex, small_button_named, toggle, vec2, widgets,
 };
 
 // ---------- Home ----------
@@ -170,40 +170,26 @@ fn font_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                 let font = st.get("font").and_then(Value::as_str).unwrap_or("").to_string();
                 let size = st.get("size").and_then(Value::as_f64);
                 let fams = font_families(app);
-                let theme_fonts: Vec<String> = fams.iter().take(2).cloned().collect();
-                dropdown(ui, "Font", &font, 150.0, en, |ui| {
-                    for (k, f) in fams.iter().enumerate() {
-                        let label = if k == 0 && theme_fonts.len() == 2 {
-                            format!("{f} (Headings)")
-                        } else if k == 1 && theme_fonts.len() == 2 {
-                            format!("{f} (Body)")
-                        } else {
-                            f.clone()
-                        };
-                        if ui.button(egui::RichText::new(label)).clicked() {
-                            run(app, "format.font", json!({"family": f}));
-                            ui.close();
-                        }
-                        if k == 1 {
-                            ui.separator();
-                        }
-                    }
+                let mut rescan = false;
+                if let Some(f) = widgets::edit_combo(ui, "Font", &font, 150.0, en, &fams, |ui| {
                     ui.separator();
                     // Fonts installed while DeckCraft runs (e.g. into ~/.local/share/fonts).
-                    if ui.button(tl!("Rescan Installed Fonts")).clicked() {
-                        run(app, "font.rescan", json!({}));
-                        ui.close();
-                    }
-                });
+                    rescan = ui.button(tl!("Rescan Installed Fonts")).clicked();
+                    rescan
+                }) {
+                    run(app, "format.font", json!({"family": f}));
+                }
+                if rescan {
+                    run(app, "font.rescan", json!({}));
+                }
                 let size_text = size.map(|s| widgets::fmt_num(s, "")).unwrap_or_default();
-                dropdown(ui, "Font size", &size_text, 52.0, en, |ui| {
-                    for s in deckcraft_engine::cmd::format::SIZES.iter() {
-                        if ui.button(widgets::fmt_num(*s, "")).clicked() {
-                            run(app, "format.size", json!({"size": s}));
-                            ui.close();
-                        }
+                let sizes: Vec<String> = deckcraft_engine::cmd::format::SIZES.iter().map(|s| widgets::fmt_num(*s, "")).collect();
+                if let Some(v) = widgets::edit_combo(ui, "Font size", &size_text, 52.0, en, &sizes, |_| false) {
+                    match widgets::parse_size(&v) {
+                        Some(sz) => run(app, "format.size", json!({"size": sz})),
+                        None => app.set_status(tl!("Type a font size between 1 and 4000")),
                     }
-                });
+                }
                 toggle(app, ui, Icon::FontGrow, "Increase Font Size", "format.grow", false);
                 toggle(app, ui, Icon::FontShrink, "Decrease Font Size", "format.shrink", false);
                 toggle(app, ui, Icon::ClearFormatting, "Clear All Formatting", "format.clear", false);

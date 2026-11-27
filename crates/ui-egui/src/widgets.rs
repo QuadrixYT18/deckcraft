@@ -372,6 +372,110 @@ pub fn dropdown(ui: &mut Ui, label: &str, current: &str, width: f32, enabled: bo
     resp
 }
 
+/// A drop-down you can type into (Font, Font Size): it shows `current`; typing lists the `items`
+/// that contain the text (any case), a click on one or Enter chooses (Enter takes the typed text
+/// itself when nothing matches exactly), Esc gives up. The arrow opens the whole list, with
+/// `extra` rows under it. Returns what was chosen.
+pub fn edit_combo(
+    ui: &mut Ui,
+    label: &str,
+    current: &str,
+    width: f32,
+    enabled: bool,
+    items: &[String],
+    extra: impl FnOnce(&mut Ui) -> bool,
+) -> Option<String> {
+    let t = Tokens::get(ui.ctx());
+    let buf_id = ui.scope_id().with(("edit-combo", label));
+    let mut buf: Option<String> = ui.data(|d| d.get_temp(buf_id));
+    let mut out = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let mut text = buf.clone().unwrap_or_else(|| current.to_string());
+        let edit = egui::TextEdit::singleline(&mut text)
+            .font(theme::font(12.0))
+            .desired_width(width - 16.0)
+            .margin(vec2(5.0, 3.0))
+            .background_color(t.field_bg)
+            .interactive(enabled);
+        let r = ui.add_sized([width - 16.0, 22.0], edit);
+        r.widget_info(|| egui::WidgetInfo {
+            current_text_value: (!current.is_empty()).then(|| current.to_string()),
+            ..egui::WidgetInfo::labeled(egui::Role::ComboBox, enabled, label)
+        });
+        if r.changed() {
+            buf = Some(text.clone());
+        }
+        let (enter, esc) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+        let typed = buf.clone().filter(|b| b.trim() != current.trim());
+        if r.lost_focus() && enter {
+            if let Some(q) = typed.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
+                let exact = items.iter().find(|s| s.eq_ignore_ascii_case(q));
+                out = Some(exact.cloned().unwrap_or_else(|| q.to_string()));
+            }
+            buf = None;
+        } else if esc {
+            buf = None;
+        }
+        // While typing: the items that contain the text.
+        let mut over_list = false;
+        if let Some(q) = typed.as_deref().map(str::to_lowercase).filter(|q| !q.trim().is_empty() && out.is_none() && buf.is_some()) {
+            let hits: Vec<&String> = items.iter().filter(|s| s.to_lowercase().contains(q.trim())).take(60).collect();
+            if let Some(shown) = egui::Popup::from_response(&r).open(!hits.is_empty()).width(width.max(180.0)).show(|ui| {
+                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                    for h in hits {
+                        if ui.button(h.as_str()).clicked() {
+                            out = Some(h.clone());
+                        }
+                    }
+                });
+            }) {
+                over_list = shown.response.contains_pointer();
+            }
+        }
+        if out.is_some() || (!r.has_focus() && !over_list && !r.lost_focus()) {
+            buf = None;
+        }
+        // The arrow: the whole list.
+        let (rect, arrow) = ui.allocate_exact_size(vec2(16.0, 22.0), if enabled { Sense::click() } else { Sense::hover() });
+        ui.painter().rect(
+            rect,
+            CornerRadius::same(4),
+            t.field_bg,
+            Stroke::new(1.0, if arrow.hovered() { t.text_faint } else { t.border }),
+            egui::StrokeKind::Inside,
+        );
+        chevron(ui.painter(), rect.center(), 3.0, t.text_dim);
+        let arrow = arrow.on_hover_text(label);
+        egui::Popup::menu(&arrow).width(width.max(160.0)).show(|ui| {
+            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                for it in items {
+                    if ui.button(it.as_str()).clicked() {
+                        out = Some(it.clone());
+                        ui.close();
+                    }
+                }
+                if extra(ui) {
+                    ui.close();
+                }
+            });
+        });
+    });
+    ui.data_mut(|d| match &buf {
+        Some(b) => {
+            d.insert_temp(buf_id, b.clone());
+        }
+        None => d.remove::<String>(buf_id),
+    });
+    out
+}
+
+/// A size typed into a size field ("12", "10,5", "14 pt"), when it is a usable one.
+pub fn parse_size(s: &str) -> Option<f64> {
+    let v: f64 = s.trim().trim_end_matches("pt").trim().replace(',', ".").parse().ok()?;
+    (v.is_finite() && (1.0..=4000.0).contains(&v)).then_some(v)
+}
+
 /// The drop-down for a `color_grid`: a menu that stays open when its hex field is clicked
 /// (egui menus close on any click inside). Picking a colour closes it (`color_grid` calls
 /// `ui.close()`); other buttons in it must close it themselves.
