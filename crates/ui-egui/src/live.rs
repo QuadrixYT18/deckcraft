@@ -305,6 +305,9 @@ fn handle_events(app: &mut SlideApp, events: Vec<Event>) {
     for ev in events {
         match ev {
             Event::Joined(doc) => {
+                // The presentation's embedded fonts, so joiners without them (the web, a tablet)
+                // draw its text as the host does.
+                deckcraft_engine::fonts::install_embedded_fonts(&doc);
                 let bind = app.live.as_ref().and_then(|l| l.bind).filter(|u| app.session.documents().iter().any(|d| d.uid == *u));
                 let uid = match bind {
                     // The host's open presentation becomes the shared one: same file, same history.
