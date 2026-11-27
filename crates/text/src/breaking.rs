@@ -285,12 +285,6 @@ pub(crate) fn tabs_of(props: &ParaProps) -> Vec<Tab> {
                 .collect()
         })
         .unwrap_or_default();
-    // A hanging indent is a stop too, as in PowerPoint: "7<tab>text" puts the text at the left
-    // margin, where the wrapped lines start.
-    let margin = props.margin_left.unwrap_or(0.0);
-    if props.indent.is_some_and(|i| i < 0.0) && margin.is_finite() && margin > 0.0 && !tabs.iter().any(|t| (t.pos - margin).abs() < 0.5) {
-        tabs.push(Tab { pos: margin, align: TabAlign::Left });
-    }
     tabs.sort_by(|a, b| a.pos.total_cmp(&b.pos));
     tabs
 }
