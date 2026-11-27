@@ -252,6 +252,43 @@ pub fn builtin_themes() -> Vec<Theme> {
             "Roboto",
             "Roboto",
         ),
+        // Railways: night blue, signal red, warning yellow, signal green and rail grey.
+        t(
+            "Rail",
+            scheme("Rail", ["1B1F24", "FFFFFF", "1F3A5F", "EEF1F4", "D62828", "F2B705", "2A9D8F", "1F6FB2", "5C6B7A", "8D99AE", "1F6FB2", "5C6B7A"]),
+            "Montserrat",
+            "Source Sans 3",
+        ),
+        // Technology: a dark board with cyan traces.
+        t(
+            "Circuit",
+            scheme(
+                "Circuit",
+                ["FFFFFF", "0D1B2A", "E0E6ED", "1B263B", "00B4D8", "38B000", "FFB703", "FB5607", "90E0EF", "8338EC", "00B4D8", "8338EC"],
+            ),
+            "Roboto",
+            "Inter",
+        ),
+        // Workshop: charcoal and safety orange on warm white.
+        t(
+            "Workshop",
+            scheme(
+                "Workshop",
+                ["222222", "FAFAF7", "3A3A3A", "ECEAE4", "E07A1F", "4A6274", "F2C14E", "7B8C3E", "B23A48", "2E86AB", "E07A1F", "4A6274"],
+            ),
+            "Montserrat",
+            "Open Sans",
+        ),
+        // School and university: deep green and gold.
+        t(
+            "Campus",
+            scheme(
+                "Campus",
+                ["1B2A1E", "FFFFFF", "1F4E3D", "F3F1E7", "1F7A4D", "C9A227", "3E6FB0", "B5483F", "6B8F71", "8E6C8A", "1F7A4D", "8E6C8A"],
+            ),
+            "Merriweather",
+            "Source Sans 3",
+        ),
     ]
 }
 

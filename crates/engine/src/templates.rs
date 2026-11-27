@@ -165,6 +165,92 @@ const STARTERS: &[Starter] = &[
             seed("title", "Walk home", &["Count the lamps you can see from your pillow"], ""),
         ],
     },
+    Starter {
+        name: "Railway Operations",
+        summary: "Bahnbetrieb: a briefing on a vehicle, a procedure or a timetable change",
+        theme: "Rail",
+        slides: &[
+            seed("title", "Betriebsablauf", &["Vom Abstellen bis zur Abfahrt"], "Stellen Sie kurz vor, für wen die Unterweisung gedacht ist."),
+            seed(
+                "titleAndContent",
+                "Überblick",
+                &[
+                    "Ausgangslage\n\tWo steht das Fahrzeug, wer ist zuständig\nAblauf\n\tSchritte in der richtigen Reihenfolge\nPrüfungen\n\tWas vor der Abfahrt sicher sein muss",
+                ],
+                "",
+            ),
+            seed("sectionHeader", "Vorbereitung", &["Fahrzeug, Unterlagen und Strecke"], ""),
+            seed(
+                "twoContent",
+                "Schritt für Schritt",
+                &[
+                    "Aufrüsten\n\tFührerraum aktivieren\n\tBremse prüfen\n\tSignale einstellen",
+                    "Abrüsten\n\tFahrzeug sichern\n\tSchalter in Grundstellung\n\tÜbergabe dokumentieren",
+                ],
+                "",
+            ),
+            seed("titleAndContent", "Häufige Fehler", &["Bremsprobe vergessen\nÜbergabebuch nicht gelesen\nStörungen nicht gemeldet"], ""),
+            seed("title", "Fragen?", &["Sicherheit geht vor Pünktlichkeit"], ""),
+        ],
+    },
+    Starter {
+        name: "Tech Talk",
+        summary: "Technik-Referat: how something works, what it costs and where it fails",
+        theme: "Circuit",
+        slides: &[
+            seed("title", "Wie funktioniert das?", &["Ein Blick unter die Haube"], ""),
+            seed("titleAndContent", "Worum es geht", &["Das Problem, das die Technik löst\nDer Aufbau in drei Teilen\nGrenzen und Risiken"], ""),
+            seed("sectionHeader", "Aufbau", &["Von außen nach innen"], ""),
+            seed(
+                "twoContent",
+                "Vorher und nachher",
+                &["Ohne die Technik\n\tLangsam\n\tFehleranfällig", "Mit der Technik\n\tSchneller\n\tNachvollziehbar"],
+                "",
+            ),
+            seed("titleAndContent", "Grenzen", &["Was sie nicht kann\nWas sie kostet\nWer sie warten muss"], ""),
+            seed("title", "Fazit", &["Eine Sache, die man sich merken sollte"], ""),
+        ],
+    },
+    Starter {
+        name: "Workshop Report",
+        summary: "Werkstattbericht: a repair or a build, from the fault to the result",
+        theme: "Workshop",
+        slides: &[
+            seed("title", "Werkstattbericht", &["Vom Fehlerbild zur Lösung"], ""),
+            seed(
+                "titleAndContent",
+                "Fehlerbild",
+                &["Was wurde beobachtet\n\tWann, wie oft, unter welchen Bedingungen\nWas wurde schon versucht"],
+                "",
+            ),
+            seed("sectionHeader", "Diagnose", &["Messen, eingrenzen, bestätigen"], ""),
+            seed(
+                "twoContent",
+                "Ursache und Maßnahme",
+                &["Ursache\n\tDefektes Bauteil\n\tMessung als Beleg", "Maßnahme\n\tTausch\n\tFunktionsprüfung"],
+                "",
+            ),
+            seed("titleAndContent", "Ergebnis", &["Fehler behoben\nMaterial und Zeit\nEmpfehlung für die nächste Wartung"], ""),
+        ],
+    },
+    Starter {
+        name: "School Presentation",
+        summary: "Schulreferat: a topic, a question, sources and a conclusion",
+        theme: "Campus",
+        slides: &[
+            seed("title", "Mein Thema", &["Referat von Vorname Nachname"], ""),
+            seed(
+                "titleAndContent",
+                "Gliederung",
+                &["Einleitung\n\tMotivation und Fragestellung\nHauptteil\n\tDefinitionen\n\tUntersuchung\nSchluss\n\tFazit und Ausblick"],
+                "",
+            ),
+            seed("sectionHeader", "Einleitung", &["Warum dieses Thema?"], ""),
+            seed("twoContent", "Pro und Contra", &["Dafür spricht\n\tArgument 1\n\tArgument 2", "Dagegen spricht\n\tArgument 1\n\tArgument 2"], ""),
+            seed("titleAndContent", "Quellen", &["Buch oder Artikel, Jahr\nWebseite, abgerufen am Datum"], ""),
+            seed("title", "Fazit", &["Die Antwort auf die Fragestellung in einem Satz"], ""),
+        ],
+    },
 ];
 
 /// The starter gallery, in the order File › New shows it.
@@ -202,6 +288,88 @@ fn text_with_levels(text: &str) -> TextBody {
 }
 
 /// A new presentation filled with `name`'s slides. `size` is the slide size in points.
+/// A plain filled shape for a master's decoration: preset `geom` at (x, y, w, h) in theme colour
+/// `slot`, with no outline.
+fn deco(doc: &mut Presentation, geom: &str, r: (f64, f64, f64, f64), slot: deckcraft_color::SchemeSlot) -> Option<deckcraft_model::Shape> {
+    use deckcraft_model::style::{Fill, Line};
+    Some(deckcraft_model::Shape {
+        id: deckcraft_model::ShapeId(doc.alloc_id()?),
+        name: "Decoration".into(),
+        xfrm: Some(deckcraft_geom::Xfrm::new(r.0, r.1, r.2, r.3)),
+        geom: deckcraft_model::Geom::Preset { name: geom.into(), adj: vec![] },
+        fill: Some(Fill::solid(deckcraft_model::ColorRef::scheme(slot))),
+        line: Some(Line::none()),
+        ..Default::default()
+    })
+}
+
+/// The look of the starters' own themes: shapes on the slide master, behind every slide's text.
+/// Rail: a track along the foot with a red signal line; Circuit: traces with solder pads in two
+/// corners; Workshop: a side bar and a hazard stripe; Campus: a green band with a gold rule.
+fn decorate(doc: &mut Presentation, theme: &str) {
+    use deckcraft_color::SchemeSlot as S;
+    let (w, h) = (doc.slide_size.width, doc.slide_size.height);
+    let mut v: Vec<Option<deckcraft_model::Shape>> = vec![];
+    match theme {
+        "Rail" => {
+            let band = h * 0.075;
+            let y = h - band;
+            v.push(deco(doc, "rect", (0.0, y, w, band), S::Dk2));
+            v.push(deco(doc, "rect", (0.0, y - h * 0.008, w, h * 0.008), S::Accent1));
+            // Sleepers, then the two rails over them.
+            let mut x = w * 0.01;
+            while x < w {
+                v.push(deco(doc, "rect", (x, y + band * 0.18, w * 0.006, band * 0.64), S::Accent5));
+                x += w * 0.028;
+            }
+            for k in [0.32, 0.68] {
+                v.push(deco(doc, "rect", (0.0, y + band * k - 1.0, w, 2.0), S::Lt2));
+            }
+            v.push(deco(doc, "roundRect", (w * 0.025, h * 0.07, w * 0.008, h * 0.09), S::Accent2));
+        }
+        "Circuit" => {
+            let t = 2.0;
+            let pad = 9.0;
+            // Top right: a trace in from the edge that turns down, with a pad at each end.
+            v.push(deco(doc, "rect", (w * 0.72, h * 0.08, w * 0.28, t), S::Accent1));
+            v.push(deco(doc, "rect", (w * 0.86, h * 0.08, t, h * 0.14), S::Accent1));
+            v.push(deco(doc, "ellipse", (w * 0.72 - pad / 2.0, h * 0.08 - pad / 2.0 + t / 2.0, pad, pad), S::Accent1));
+            v.push(deco(doc, "ellipse", (w * 0.86 - pad / 2.0 + t / 2.0, h * 0.22 - pad / 2.0, pad, pad), S::Accent1));
+            v.push(deco(doc, "rect", (w * 0.78, h * 0.13, w * 0.22, t), S::Accent2));
+            v.push(deco(doc, "ellipse", (w * 0.78 - pad / 2.0, h * 0.13 - pad / 2.0 + t / 2.0, pad, pad), S::Accent2));
+            // Bottom left.
+            v.push(deco(doc, "rect", (0.0, h * 0.92, w * 0.22, t), S::Accent1));
+            v.push(deco(doc, "rect", (w * 0.22, h * 0.84, t, h * 0.08 + t), S::Accent1));
+            v.push(deco(doc, "ellipse", (w * 0.22 - pad / 2.0 + t / 2.0, h * 0.84 - pad / 2.0, pad, pad), S::Accent1));
+        }
+        "Workshop" => {
+            v.push(deco(doc, "rect", (0.0, 0.0, w * 0.014, h), S::Accent1));
+            let band = h * 0.035;
+            let step = w * 0.04;
+            let mut x = -step;
+            let mut k = 0;
+            while x < w {
+                v.push(deco(doc, "parallelogram", (x, h - band, step, band), if k % 2 == 0 { S::Accent1 } else { S::Dk2 }));
+                x += step * 0.75;
+                k += 1;
+            }
+        }
+        "Campus" => {
+            v.push(deco(doc, "rect", (0.0, 0.0, w, h * 0.025), S::Accent1));
+            v.push(deco(doc, "rect", (0.0, h * 0.025, w, h * 0.005), S::Accent2));
+            v.push(deco(doc, "rect", (0.0, h * 0.97, w, h * 0.03), S::Accent1));
+        }
+        _ => return,
+    }
+    let shapes: Vec<deckcraft_model::Shape> = v.into_iter().flatten().collect();
+    if let Some(m) = doc.masters.first_mut() {
+        let m = Arc::make_mut(m);
+        let mut all = shapes;
+        all.append(&mut m.shapes);
+        m.shapes = all;
+    }
+}
+
 pub fn build(name: &str, size: Size) -> Result<Presentation> {
     let starter = find(name).ok_or_else(|| {
         let names = starters().iter().map(|t| t.name).collect::<Vec<_>>().join(", ");
@@ -212,6 +380,7 @@ pub fn build(name: &str, size: Size) -> Result<Presentation> {
         .find(|t| t.name.eq_ignore_ascii_case(starter.theme))
         .ok_or_else(|| bad("file.new", format!("template `{}` names a missing theme `{}`", starter.name, starter.theme)))?;
     let mut doc = defaults::blank_presentation(size, theme, false);
+    decorate(&mut doc, starter.theme);
     for seed in starter.slides {
         let key = Value::String(seed.layout.to_string());
         let layout = find_layout(&doc, &key, 0)

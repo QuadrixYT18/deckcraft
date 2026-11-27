@@ -253,9 +253,10 @@ impl Session {
                 self.tool.preview = Some(Xfrm::new(p.x, p.y, 0.0, 0.0));
                 return Ok(Value::Null);
             }
-            ToolKind::Ink { mode, .. } => {
+            ToolKind::Ink { mode, width, .. } => {
                 if mode == "eraser" {
-                    return self.erase_at(p, tol);
+                    // The eraser's width (Draw › Eraser size) widens what it reaches.
+                    return self.erase_at(p, tol.max(width / 2.0));
                 }
                 let sample = self.ink_sample(p);
                 self.tool.drag = Some(Drag::Ink { points: vec![sample] });

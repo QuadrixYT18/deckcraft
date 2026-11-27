@@ -172,6 +172,54 @@ pub fn set_current(lang: Lang) {
     CURRENT.set(lang);
 }
 
+/// The language tag (`de-DE`) for text that names none, in a presentation that names none either:
+/// the interface language's.
+pub fn text_lang_default() -> String {
+    let code = current().code();
+    if code.contains('-') {
+        return code.to_string();
+    }
+    match code {
+        "en" => "en-US",
+        "de" => "de-DE",
+        "fr" => "fr-FR",
+        "es" => "es-ES",
+        "it" => "it-IT",
+        "nl" => "nl-NL",
+        "pl" => "pl-PL",
+        "pt" => "pt-PT",
+        "sv" => "sv-SE",
+        "da" => "da-DK",
+        "nb" | "no" => "nb-NO",
+        "fi" => "fi-FI",
+        "cs" => "cs-CZ",
+        "ja" => "ja-JP",
+        "ko" => "ko-KR",
+        "zh" => "zh-CN",
+        other => other,
+    }
+    .to_string()
+}
+
+/// The language of a presentation's text where a run names none: the first language its text
+/// names, else the interface language's.
+pub fn doc_text_lang(doc: &deckcraft_model::Presentation) -> String {
+    for sl in &doc.slides {
+        let mut found = None;
+        deckcraft_model::walk(&sl.shapes, &mut |sh, _| {
+            if found.is_none()
+                && let Some(t) = &sh.text
+            {
+                found = t.paragraphs.iter().flat_map(|p| &p.runs).find_map(|r| r.props.lang.clone());
+            }
+        });
+        if let Some(l) = found {
+            return l;
+        }
+    }
+    text_lang_default()
+}
+
 /// The language the UI is drawn in.
 pub fn current() -> Lang {
     CURRENT.get()
@@ -268,3 +316,25 @@ pub(crate) fn use_fixture(code: &'static str, source: &'static str) -> Lang {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod text_lang_tests {
+    use super::*;
+
+    #[test]
+    fn text_without_a_language_takes_the_presentations_else_the_interfaces() {
+        let prev = current();
+        set_current(Lang::from_pref("de"));
+        let mut doc = deckcraft_model::Presentation::default();
+        assert_eq!(doc_text_lang(&doc), "de-DE", "a German interface writes German text");
+        let mut slide = deckcraft_model::Slide::default();
+        let mut sh = deckcraft_model::Shape { text: Some(deckcraft_model::TextBody::from_text("Hi")), ..Default::default() };
+        if let Some(t) = sh.text.as_mut() {
+            t.paragraphs[0].runs[0].props.lang = Some("fr-FR".into());
+        }
+        slide.shapes.push(sh);
+        doc.slides.push(std::sync::Arc::new(slide));
+        assert_eq!(doc_text_lang(&doc), "fr-FR", "the presentation's own language wins");
+        set_current(prev);
+    }
+}

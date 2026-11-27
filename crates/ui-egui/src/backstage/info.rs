@@ -226,8 +226,15 @@ pub(super) fn about(app: &mut SlideApp, ui: &mut Ui) {
             if task(ui, Icon::Help, "Credits", "Credits", "The people and models who built DeckCraft.", true) {
                 let _ = app.run("app.about", json!({}));
             }
+            // macOS, built from a source folder: rebuild and reinstall from it.
+            if cfg!(target_os = "macos")
+                && task(ui, Icon::Help, "Update DeckCraft", "Update DeckCraft…", "Fetch the newest version, build it and restart DeckCraft.", true)
+                && let Err(e) = app.run("app.updateFromSource", json!({}))
+            {
+                app.set_status(e);
+            }
             ui.hyperlink_to(tl!("Join our community on Discord"), deckcraft_engine::links::DISCORD);
-            ui.hyperlink_to("Source on GitHub", deckcraft_engine::links::GITHUB);
+            ui.hyperlink_to(tl!("Source on GitHub"), deckcraft_engine::links::GITHUB);
         });
         ui.add_space(40.0);
         ui.vertical(|ui| {

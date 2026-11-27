@@ -228,6 +228,37 @@ fn body_behind(children: &[Shape], k: usize) -> Option<usize> {
         .map(|(j, _)| j)
 }
 
+/// Shrink `children` about the area's top-left corner (boxes and type alike) when they reach past
+/// `area`, so a graphic that grew keeps to its place, as PowerPoint makes room.
+fn fit_into(children: &mut [Shape], area: Xfrm) {
+    let boxes: Vec<Xfrm> = children.iter().filter_map(|c| c.xfrm).collect();
+    let (Some(x1), Some(y1)) = (boxes.iter().map(|b| b.x + b.w).reduce(f64::max), boxes.iter().map(|b| b.y + b.h).reduce(f64::max)) else { return };
+    let (x0, y0) = (boxes.iter().map(|b| b.x).fold(area.x, f64::min), boxes.iter().map(|b| b.y).fold(area.y, f64::min));
+    let (w, h) = (x1 - x0, y1 - y0);
+    if w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    let k = (area.w / w).min(area.h / h).min(1.0);
+    if k >= 0.999 {
+        return;
+    }
+    for c in children.iter_mut() {
+        if let Some(b) = c.xfrm.as_mut() {
+            b.x = area.x + (b.x - x0) * k;
+            b.y = area.y + (b.y - y0) * k;
+            b.w *= k;
+            b.h *= k;
+        }
+        if let Some(t) = c.text.as_mut() {
+            for r in t.paragraphs.iter_mut().flat_map(|p| p.runs.iter_mut()) {
+                if let Some(sz) = r.props.size.as_mut() {
+                    *sz = (*sz * k).max(1.0);
+                }
+            }
+        }
+    }
+}
+
 /// Add or remove one line of an imported graphic in its drawing, so the graphic keeps its look.
 /// Removing takes the line and its sub-points out of their boxes (a box left empty goes, with the
 /// shape behind it). Adding after line `i` copies its box and the shape behind it one step
@@ -301,7 +332,8 @@ fn edit_imported_in_place(s: &mut Session, p: &Value, cmd: &'static str, i: usiz
                 }
                 let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(cmd, "no slide"))?;
                 let g = deckcraft_model::find_shape_mut(shapes, gid).ok_or_else(|| bad(cmd, "no such shape"))?;
-                let ShapeKind::Group { children, .. } = &mut g.kind else { return Err(bad(cmd, "not a Diagram graphic")) };
+                let ShapeKind::Group { children, child } = &mut g.kind else { return Err(bad(cmd, "not a Diagram graphic")) };
+                let child_area = *child;
                 let moved = |sh: &Shape, id: ShapeId| {
                     let mut c = sh.clone();
                     c.id = id;
@@ -322,6 +354,7 @@ fn edit_imported_in_place(s: &mut Session, p: &Value, cmd: &'static str, i: usiz
                     children.push(shape);
                 }
                 children.push(label);
+                fit_into(children, child_area);
                 if let Some(d) = g.diagram.as_mut() {
                     d.nodes.insert(end, DiagramNode { text: text.clone(), level: lv, ..Default::default() });
                 }
