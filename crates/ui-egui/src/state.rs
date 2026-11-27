@@ -83,6 +83,8 @@ pub struct UiState {
     pub show_keep_cursor: bool,
     /// Presentation and Presenter View swapped between the two displays (Swap Displays).
     pub swap_displays: bool,
+    /// The Draw tab's pens, in order: each one's colour and width can be changed.
+    pub pens: Vec<Pen>,
     pub ui_scale: f32,
     /// Format Shape pane: tab (`fill`, `effects`, `size`, `picture`, `text`).
     pub format_tab: String,
@@ -127,6 +129,7 @@ impl Default for UiState {
             presenter_view: true,
             show_keep_cursor: false,
             swap_displays: false,
+            pens: Pen::defaults(),
             ui_scale: 1.0,
             format_tab: "fill".into(),
             smartart_row: 0,
@@ -218,5 +221,28 @@ impl ImeDescriptorKey {
     /// purpose.
     pub(crate) fn new(owner: egui::Id, context_generation: u64, purpose: egui::IMEPurpose) -> Self {
         Self { owner, context_generation, purpose }
+    }
+}
+
+/// One pen on the Draw tab.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Pen {
+    /// `pen`, `pencil` or `highlighter`.
+    pub kind: String,
+    pub rgb: [u8; 3],
+    /// Width in points.
+    pub width: f64,
+}
+
+impl Pen {
+    pub fn defaults() -> Vec<Pen> {
+        let p = |kind: &str, rgb: [u8; 3], width: f64| Pen { kind: kind.into(), rgb, width };
+        vec![
+            p("pen", [20, 20, 20], 1.5),
+            p("pen", [0xD8, 0x3F, 0x3F], 1.5),
+            p("pen", [0x2E, 0x6F, 0xD8], 1.5),
+            p("pencil", [90, 90, 90], 1.0),
+            p("highlighter", [255, 230, 0], 10.0),
+        ]
     }
 }
