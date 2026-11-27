@@ -58,6 +58,31 @@ impl DateTime {
 
 const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONATE: [&str; 12] = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+const MON_DE: [&str; 12] = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+const TAGE: [&str; 7] = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+
+/// German forms: named months and weekdays, 24-hour times (German has no AM/PM forms).
+fn german(kind: &str, now: DateTime, short: &str) -> Option<String> {
+    let month = MONATE.get(now.month.checked_sub(1)? as usize)?;
+    let mon = MON_DE.get(now.month.checked_sub(1)? as usize)?;
+    let day = TAGE.get(now.weekday())?;
+    let (d, y, yy) = (now.day, now.year, now.year.rem_euclid(100));
+    let (h, mi, s) = (now.hour, now.minute, now.second);
+    Some(match kind {
+        "datetime" | "datetimeFigureOut" | "datetime1" => short.to_string(),
+        "datetime2" => format!("{day}, {d}. {month} {y}"),
+        "datetime3" | "datetime4" => format!("{d}. {month} {y}"),
+        "datetime5" => format!("{d:02}-{mon}-{yy:02}"),
+        "datetime6" => format!("{month} {yy:02}"),
+        "datetime7" => format!("{mon}-{yy:02}"),
+        "datetime8" => format!("{short} {h:02}:{mi:02}"),
+        "datetime9" => format!("{short} {h:02}:{mi:02}:{s:02}"),
+        "datetime10" => format!("{h:02}:{mi:02}"),
+        "datetime11" => format!("{h:02}:{mi:02}:{s:02}"),
+        _ => return None,
+    })
+}
 
 /// Is field `kind` a date/time field?
 pub fn is_date_field(kind: &str) -> bool {
@@ -104,6 +129,9 @@ pub fn field_text(kind: &str, lang: Option<&str>, now: DateTime) -> Option<Strin
     let ampm = if now.hour < 12 { "AM" } else { "PM" };
     let (mi, s) = (now.minute, now.second);
     let short = short_date(&lang, now);
+    if lang == "de" || lang.starts_with("de-") {
+        return german(kind, now, &short);
+    }
     // British-style English writes the day before the month ("9 October 2026"). The punctuation
     // follows PowerPoint on Windows per locale: Irish English has no comma after the weekday,
     // British and Australian English put one after the month in `datetime3`, and South African
@@ -189,8 +217,11 @@ mod tests {
         assert_eq!(field_text("datetime1", Some("ja-JP"), FRI).as_deref(), Some("2026/10/9"));
         assert_eq!(field_text("datetime1", Some("sv-SE"), FRI).as_deref(), Some("2026-10-09"));
         assert_eq!(field_text("datetime10", Some("fr-FR"), FRI).as_deref(), Some("20:05"));
-        // Month names in another language: not computed (the field keeps its saved text).
-        assert_eq!(field_text("datetime2", Some("de-DE"), FRI), None);
+        // German has its own names and 24-hour times; other languages' names are not computed
+        // (the field keeps its saved text).
+        assert_eq!(field_text("datetime2", Some("de-DE"), FRI).as_deref(), Some("Freitag, 9. Oktober 2026"));
+        assert_eq!(field_text("datetime8", Some("de-DE"), FRI).as_deref(), Some("09.10.2026 20:05"));
+        assert_eq!(field_text("datetime12", Some("de-DE"), FRI), None);
         assert_eq!(field_text("datetime12", Some("fr-FR"), FRI), None);
         assert_eq!(field_text("datetime4", Some("en-GB"), FRI).as_deref(), Some("9 October 2026"));
         assert_eq!(field_text("datetime2", Some("en-GB"), FRI).as_deref(), Some("Friday, 9 October 2026"));

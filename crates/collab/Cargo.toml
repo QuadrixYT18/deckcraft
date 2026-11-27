@@ -1,0 +1,16 @@
+[package]
+name = "deckcraft-collab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DeckCraft live collaboration: document patches, the client sync state machine and the server's shared state"
+
+[lints]
+workspace = true
+
+[dependencies]
+deckcraft-model = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+base64 = "0.22"

@@ -651,6 +651,7 @@ fn emit_bullet(out: &mut TextLayout, p: &ParaShaped, pl: &PlacedLine, shift_x: f
         link: false,
         alpha: st.alpha,
         gradient: None,
+        pattern: None,
         effects: None,
         upright: false,
     };
@@ -688,6 +689,7 @@ fn new_run(cell: &Cell, st: &Style, face: &Arc<FontFace>, para: usize, pos: &Cel
         link: st.link,
         alpha: st.alpha,
         gradient: st.gradient.clone(),
+        pattern: st.pattern.clone(),
         effects: st.effects,
         upright: cell.upright,
     }

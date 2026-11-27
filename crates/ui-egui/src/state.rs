@@ -73,12 +73,16 @@ pub struct UiState {
     pub smart_guides: bool,
     /// None = fit to window.
     pub zoom: Option<f32>,
+    /// Crop mode (Picture Format › Crop) on this picture: handles on its edges cut it to any size.
+    pub crop: Option<deckcraft_model::ShapeId>,
     pub sorter_zoom: f32,
     pub recent: Vec<String>,
     pub presenter_view: bool,
     /// Set Up Slide Show ▸ Keep mouse cursor visible: full-screen shows never hide a still pointer,
     /// for decks with clickable choices (#1445).
     pub show_keep_cursor: bool,
+    /// Presentation and Presenter View swapped between the two displays (Swap Displays).
+    pub swap_displays: bool,
     pub ui_scale: f32,
     /// Format Shape pane: tab (`fill`, `effects`, `size`, `picture`, `text`).
     pub format_tab: String,
@@ -94,6 +98,8 @@ pub struct UiState {
     pub comment_focus: Option<(usize, usize)>,
     /// Quick Access Toolbar buttons, left to right.
     pub qat: Vec<qat::QatItem>,
+    /// Interface language: [`crate::i18n::AUTO`] (follow the system) or a language code (`de`).
+    pub language: String,
 }
 
 impl Default for UiState {
@@ -115,10 +121,12 @@ impl Default for UiState {
             guides: false,
             smart_guides: true,
             zoom: None,
+            crop: None,
             sorter_zoom: 1.0,
             recent: vec![],
             presenter_view: true,
             show_keep_cursor: false,
+            swap_displays: false,
             ui_scale: 1.0,
             format_tab: "fill".into(),
             smartart_row: 0,
@@ -127,6 +135,7 @@ impl Default for UiState {
             grayscale: false,
             comment_focus: None,
             qat: qat::defaults(),
+            language: crate::i18n::AUTO.into(),
         }
     }
 }
@@ -156,6 +165,13 @@ impl UiState {
             self.format_tab = d.format_tab;
         }
         self.pane = self.pane.filter(short);
+        // A language code this build doesn't offer (a release's catalogs in a local build, a newer
+        // version's) is kept and follows the system until it is offered; anything else is reset.
+        self.language = match crate::i18n::normalize_pref(&self.language) {
+            Some(code) => code.into(),
+            None if crate::i18n::well_formed_code(&self.language) => self.language.to_ascii_lowercase(),
+            None => crate::i18n::AUTO.into(),
+        };
         self.recent.retain(|p| !p.is_empty() && p.len() <= 4096 && !p.contains('\0'));
         self.recent.dedup();
         self.recent.truncate(RECENT_MAX);

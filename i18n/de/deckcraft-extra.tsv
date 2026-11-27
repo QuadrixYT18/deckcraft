@@ -1,0 +1,101 @@
+# Deutsch (de): strings of this branch's additions (live sessions, Copilot, navigation arrow)
+# that storytold/craft-i18n doesn't have yet. Appended to locales/de/deckcraft.tsv at build time
+# (crates/ui-egui/build.rs). Columns: context <TAB> English <TAB> German.
+	Live\nSession	Live-\nSitzung
+	Live Session	Live-Sitzung
+	Copilot	Copilot
+	Edit this presentation together with others	Diese Präsentation gemeinsam mit anderen bearbeiten
+	Check the presentation and improve it (offline, free)	Präsentation prüfen und verbessern (offline, kostenlos)
+	Arrow: Navigation	Pfeil: Navigation
+	Live: connecting…	Live: verbinde…
+	 · view only	 · nur ansehen
+	 · syncing	 · synchronisiere
+	Live · 1 person	Live · 1 Person
+	Live · {n} people	Live · {n} Personen
+	Live: offline, reconnecting…	Live: offline, verbinde neu…
+	Live session ended ({reason})	Live-Sitzung beendet ({reason})
+	Live session: {message}	Live-Sitzung: {message}
+	Can't reach {server}: {error}	{server} ist nicht erreichbar: {error}
+	Live session: a change was refused ({reason}) and undone	Live-Sitzung: Eine Änderung wurde abgelehnt ({reason}) und rückgängig gemacht
+	Live session: {message}. Your copy stays open.	Live-Sitzung: {message}. Deine Kopie bleibt geöffnet.
+	Live session: can't connect to {server} yet ({why}). Retrying… Check that this device is on the same network as the host and that the server is running.	Live-Sitzung: Noch keine Verbindung zu {server} ({why}). Neuer Versuch… Prüfe, ob dieses Gerät im selben Netzwerk wie der Gastgeber ist und der Server läuft.
+	Session: {title}	Sitzung: {title}
+	slide {n}	Folie {n}
+	Access code	Zugangscode
+	Close	Schließen
+	Copy code	Code kopieren
+	Copy invitation link	Einladungslink kopieren
+	Join a session	Einer Sitzung beitreten
+	Join	Beitreten
+	Leave session	Sitzung verlassen
+	Live session: connected	Live-Sitzung: verbunden
+	Live session: connected. Loading the presentation…	Live-Sitzung: verbunden. Präsentation wird geladen…
+	Live sessions aren't available in this build.	Live-Sitzungen sind in dieser Version nicht verfügbar.
+	Open host dashboard	Gastgeber-Dashboard öffnen
+	People	Teilnehmer
+	Scan with a phone or tablet\nto join this session.	Mit Handy oder Tablet scannen,\num dieser Sitzung beizutreten.
+	Server	Server
+	Share this presentation	Diese Präsentation teilen
+	Start live session	Live-Sitzung starten
+	Starts a session on the server with the open presentation. You get an access code to give to others.	Startet eine Sitzung auf dem Server mit der geöffneten Präsentation. Du erhältst einen Zugangscode für die anderen.
+	This live session is view only	Diese Live-Sitzung ist nur zum Ansehen
+	Your name	Dein Name
+	Live session: you can now only view	Live-Sitzung: Du kannst jetzt nur noch ansehen
+	Live session: you can edit again	Live-Sitzung: Du kannst wieder bearbeiten
+	The host removed you from the session	Der Gastgeber hat dich aus der Sitzung entfernt
+	The host ended the session	Der Gastgeber hat die Sitzung beendet
+	The invitation is no longer valid	Die Einladung ist nicht mehr gültig
+	This session was opened elsewhere	Diese Sitzung wurde an anderer Stelle geöffnet
+	Your presentation assistant. It runs on this device, free and offline.	Dein Präsentationsassistent. Er läuft auf diesem Gerät, kostenlos und offline.
+	Create	Erstellen
+	Agenda slide	Agenda-Folie
+	Adds an agenda after the first slide, from the sections or the slide titles	Fügt nach der ersten Folie eine Agenda aus den Abschnitten oder Folientiteln ein
+	Speaker notes for this slide	Sprechernotizen für diese Folie
+	Drafts notes from the slide's own text where the notes are empty	Entwirft Notizen aus dem Folientext, wo die Notizen leer sind
+	Speaker notes for all slides	Sprechernotizen für alle Folien
+	Drafts notes for every slide whose notes are empty	Entwirft Notizen für jede Folie ohne Notizen
+	Split this slide in two	Diese Folie in zwei aufteilen
+	Moves the second half of a crowded text box to a new slide	Verschiebt die zweite Hälfte eines vollen Textfelds auf eine neue Folie
+	Design ideas for this slide	Design-Ideen für diese Folie
+	Check	Prüfung
+	{slides} slides · {words} words	{slides} Folien · {words} Wörter
+	✔ Nothing to improve. Well done!	✔ Nichts zu verbessern. Gut gemacht!
+	Fix all {n} automatically	Alle {n} automatisch beheben
+	Copilot: fixed {ok} of {n}	Copilot: {ok} von {n} behoben
+	Fix	Beheben
+	Copilot: fixed	Copilot: behoben
+	Draft notes	Notizen entwerfen
+	Split slide	Folie aufteilen
+	Copilot: slide split in two	Copilot: Folie in zwei aufgeteilt
+	The title has {words} words. Titles of up to {max} words are read at a glance.	Der Titel hat {words} Wörter. Titel mit bis zu {max} Wörtern erfasst man auf einen Blick.
+	"{name}" has {lines} lines. Up to {max} bullets per box keep it readable; split it over two slides.	„{name}“ hat {lines} Zeilen. Bis zu {max} Aufzählungspunkte pro Feld bleiben lesbar; teile es auf zwei Folien auf.
+	"{name}" uses {size} pt text. From {min} pt it can be read from the back of a room.	„{name}“ verwendet {size}-pt-Schrift. Ab {min} pt ist sie auch hinten im Raum lesbar.
+	"{name}" is empty. Fill it or delete it.	„{name}“ ist leer. Fülle es oder lösche es.
+	Slide {slide} has {words} words. Around {max} or fewer keeps the audience listening rather than reading.	Folie {slide} hat {words} Wörter. Mit etwa {max} oder weniger hört das Publikum zu, statt zu lesen.
+	Slide {slide} has no title. A title helps the audience and screen readers follow along.	Folie {slide} hat keinen Titel. Ein Titel hilft dem Publikum und Bildschirmlesern beim Folgen.
+	Slide {slide} has no speaker notes.	Folie {slide} hat keine Sprechernotizen.
+	The presentation uses {count} fonts ({fonts}). Two or three look calmer.	Die Präsentation verwendet {count} Schriftarten ({fonts}). Zwei oder drei wirken ruhiger.
+	{slides} slides and no sections. Sections (Home › Section) group the slide list.	{slides} Folien und keine Abschnitte. Abschnitte (Start › Abschnitt) gliedern die Folienliste.
+	Drag the black handles to cut the picture; Esc ends	Schwarze Griffe ziehen, um das Bild zuzuschneiden; Esc beendet
+	Crop Mode	Zuschneidemodus
+	More Colors	Weitere Farben
+	Use this colour	Diese Farbe verwenden
+	{date} in the footer text shows today's date	{date} im Fußzeilentext zeigt das heutige Datum
+	From Bottom	Von unten
+	From Bottom-Left	Von links unten
+	From Top-Left	Von links oben
+	From Top	Von oben
+	From Top-Right	Von rechts oben
+	From Bottom-Right	Von rechts unten
+	To Bottom	Nach unten
+	To Bottom-Left	Nach links unten
+	To Left	Nach links
+	To Top-Left	Nach links oben
+	To Top	Nach oben
+	To Top-Right	Nach rechts oben
+	To Right	Nach rechts
+	To Bottom-Right	Nach rechts unten
+	By Paragraph	Nach Absatz
+	As One Object	Als ein Objekt
+	Swap Displays	Bildschirme tauschen
+	Show the presentation where this window is, and this window where the presentation is	Die Präsentation dort zeigen, wo dieses Fenster ist, und dieses Fenster dort, wo die Präsentation ist

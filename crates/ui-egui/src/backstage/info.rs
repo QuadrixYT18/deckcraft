@@ -2,7 +2,7 @@ use super::files::task;
 use super::{Backstage, Icon, Outcome, Page, RichText, Sense, SlideApp, Tokens, Ui, Value, dim, heading, json, theme, vec2};
 
 /// Save As and Change File Type: (id for [`SlideApp::export_as`], label, detail).
-pub const SAVE_TYPES: [(&str, &str, &str); 7] = [
+pub const SAVE_TYPES: [(&str, &str, &str); 9] = [
     ("pptx", "PowerPoint Presentation (*.pptx)", "Opens in PowerPoint and other presentation apps"),
     ("deckcraft", "DeckCraft Presentation (*.deckcraft)", "DeckCraft's own format: everything is kept"),
     ("pdf", "PDF (*.pdf)", "A fixed copy that keeps its layout on any device"),
@@ -10,6 +10,8 @@ pub const SAVE_TYPES: [(&str, &str, &str); 7] = [
     ("rtf", "Outline/RTF (*.rtf)", "The slide titles and bullet text for word processors"),
     ("png", "PNG Picture (*.png)", "The current slide as a picture"),
     ("jpeg", "JPEG Picture (*.jpg)", "The current slide as a compressed picture"),
+    ("pngAll", "PNG Pictures, all slides (*.png)", "Every slide as its own picture"),
+    ("jpegAll", "JPEG Pictures, all slides (*.jpg)", "Every slide as its own compressed picture"),
 ];
 
 /// Info page properties: (`file.properties` key, label, hint).
@@ -42,13 +44,13 @@ pub(super) fn info(app: &mut SlideApp, ui: &mut Ui, bs: &mut Backstage) {
     if let Some(p) = &path {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if ui.button("Copy path").clicked() {
+            if ui.button(tl!("Copy path")).clicked() {
                 ui.ctx().copy_text(p.clone());
                 app.set_status("Copied the path");
             }
             #[cfg(not(target_arch = "wasm32"))]
             if let Some(dir) = std::path::Path::new(p).parent().and_then(std::path::Path::to_str)
-                && ui.button("Open file location").clicked()
+                && ui.button(tl!("Open file location")).clicked()
             {
                 app.open_url(&format!("file:///{}", dir.replace('\\', "/").trim_start_matches('/')));
             }
@@ -156,6 +158,8 @@ pub(super) fn save_as(app: &mut SlideApp, ui: &mut Ui, bs: &mut Backstage, out: 
     ui.horizontal(|ui| {
         craft_ui::ComboBox::from_id_salt("backstage_save_type")
             .width(340.0)
+            // Every type in view: at the default height the last ones were behind a scroll.
+            .height(f32::INFINITY)
             .selected_text(current)
             .show_ui(ui, |ui| {
                 for (id, label, _) in SAVE_TYPES {
@@ -214,7 +218,7 @@ pub(super) fn about(app: &mut SlideApp, ui: &mut Ui) {
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::hover());
                 crate::dialogs::paint_logo(ui.painter(), r);
-                ui.label(RichText::new("DeckCraft").font(theme::bold(24.0)).color(t.text));
+                ui.label(RichText::new(tl!("DeckCraft")).font(theme::bold(24.0)).color(t.text));
             });
             dim(ui, &crate::dialogs::version_line());
             dim(ui, "Open source under MIT OR Apache-2.0. Not affiliated with Microsoft.");
@@ -222,7 +226,7 @@ pub(super) fn about(app: &mut SlideApp, ui: &mut Ui) {
             if task(ui, Icon::Help, "Credits", "Credits", "The people and models who built DeckCraft.", true) {
                 let _ = app.run("app.about", json!({}));
             }
-            ui.hyperlink_to("Join our community on Discord", deckcraft_engine::links::DISCORD);
+            ui.hyperlink_to(tl!("Join our community on Discord"), deckcraft_engine::links::DISCORD);
             ui.hyperlink_to("Source on GitHub", deckcraft_engine::links::GITHUB);
         });
         ui.add_space(40.0);

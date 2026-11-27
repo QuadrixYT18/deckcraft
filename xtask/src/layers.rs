@@ -43,8 +43,11 @@ pub const TABLE: &[(&str, Class)] = &[
     ("text", Class::Layer(2)),
     ("anim", Class::Layer(2)),
     ("format", Class::Layer(2)),
+    // Live collaboration: the document patches clients and the server exchange (model only).
+    ("collab", Class::Layer(2)),
     ("render", Class::Layer(3)),
     ("pptx", Class::Layer(3)),
+    ("ppt", Class::Layer(3)),
     ("pdf", Class::Layer(4)),
     ("engine", Class::Layer(5)),
     ("ui-egui", Class::Layer(6)),
@@ -54,12 +57,13 @@ pub const TABLE: &[(&str, Class)] = &[
     ("deckcraft", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
+    ("server", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
 
 /// Upward dev-dependencies allowed for integration tests: the PPTX round-trip tests drive the
-/// engine (build a deck with commands, export, re-import).
-pub const DEV_EXCEPTIONS: &[(&str, &str)] = &[("pptx", "engine")];
+/// engine (build a deck with commands, export, re-import), and the PPT tests open a file through it.
+pub const DEV_EXCEPTIONS: &[(&str, &str)] = &[("pptx", "engine"), ("ppt", "engine")];
 
 /// Explicit orderings *within* a layer (earlier may be used by later).
 pub const INTRA_LAYER_ORDER: &[&[&str]] = &[];

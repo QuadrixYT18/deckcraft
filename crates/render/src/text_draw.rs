@@ -5,7 +5,7 @@ use super::{
 };
 
 /// The prompt shown in an empty placeholder, formatted like its content would be.
-pub(crate) fn prompt_body(rctx: &Ctx, s: &Shape, kind: PhType) -> TextBody {
+pub(crate) fn prompt_body(rctx: &Ctx, s: &Shape, kind: PhType, translate: Option<&dyn Fn(&str) -> String>) -> TextBody {
     // Layout/master prompt text when the layout supplies a custom one.
     let (lp, _) = resolve::parents(rctx, s);
     let custom = lp.and_then(|l| l.ph.as_ref().filter(|p| p.has_custom_prompt).and(l.text.as_ref())).filter(|t| !t.is_empty());
@@ -19,7 +19,10 @@ pub(crate) fn prompt_body(rctx: &Ctx, s: &Shape, kind: PhType) -> TextBody {
     if txt.is_empty() || kind.is_footer_kind() {
         return TextBody::default();
     }
-    let mut t = TextBody::from_text(txt);
+    let mut t = match translate {
+        Some(translate) => TextBody::from_text(&translate(txt)),
+        None => TextBody::from_text(txt),
+    };
     if matches!(kind, PhType::Picture | PhType::Chart | PhType::Table | PhType::Media | PhType::Diagram | PhType::ClipArt) {
         t.body.anchor = Some(deckcraft_model::text::Anchor::Bottom);
         if let Some(p) = t.paragraphs.first_mut() {
@@ -155,7 +158,7 @@ pub fn draw_layout_with(ctx: &mut RenderContext, l: &deckcraft_text::TextLayout,
             };
             let li = lines_of.line_at(run.para, *y);
             if !grads.iter().any(|(i, _)| *i == li) {
-                let scheme = deckcraft_color::ColorScheme { name: String::new(), colors: [Rgba::BLACK; 12] };
+                let scheme = deckcraft_color::ColorScheme::new(String::new(), [Rgba::BLACK; 12]);
                 let stops = g.stops.iter().map(|s| (s.pos, s.color.resolve(&scheme, None))).collect();
                 let bounds = l.lines.get(li).and_then(line_bounds).unwrap_or(tr);
                 grads.push((li, paint::gradient(&g.shape, stops, bounds, run.alpha * ps.opacity)));
@@ -376,7 +379,16 @@ fn draw_glyph_with(
     }
     let skew = if run.fake_italic { Affine::new([1.0, 0.0, -0.2, 1.0, 0.0, 0.0]) } else { Affine::IDENTITY };
     ctx.set_transform(at * skew * Affine::scale(k));
-    if let Some((g, to_text)) = fill
+    if let Some(p) = run.pattern.as_ref()
+        && alpha > 0.0
+        && fill.is_none()
+    {
+        // The pattern's cells are laid out in text space, so they keep their size on the slide.
+        let (name, fg, bg) = p.as_ref();
+        let outline = (skew * Affine::scale(k)) * (*path).clone();
+        crate::pattern::fill(ctx, name, *fg, *bg, alpha, &outline, at);
+        ctx.set_transform(at * skew * Affine::scale(k));
+    } else if let Some((g, to_text)) = fill
         && alpha > 0.0
     {
         ctx.set_paint(g.clone());

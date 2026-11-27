@@ -90,7 +90,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Borders",
             ["Table Design", "Draw Borders"],
             None,
-            "{which: all|outside|inside|insideH|insideV|top|bottom|left|right|diagDown|diagUp|none, color?, width?: pt, dash?: solid|dash|dot…, cells?: [[r,c],…] (default: selected cells or all), id?}",
+            "{which: all|outside|inside|insideH|insideV|top|bottom|left|right|diagDown|diagUp|none, color?, width?: pt, dash?: solid|dash|dot…, toggle?: bool (when every chosen side already has this line, remove it instead), cells?: [[r,c],…] (default: selected cells or all), id?}",
             has_selection,
             borders
         ),
@@ -286,6 +286,12 @@ fn with_table(s: &mut Session, p: &Value, cmd: &str, f: impl Fn(&mut Table) -> R
     };
     let r = edit_shapes(s, &json!({"id": id}), cmd, |sh| match &mut sh.kind {
         ShapeKind::Table(t) => {
+            // Edits walk the grid: bound it first (a loaded table need not be normalized yet).
+            // An over-cap table is refused, not trimmed: a trim would delete rows while reporting success.
+            if t.over_cap() {
+                return Err(bad(cmd, format!("the table is larger than {} cells; edit refused", deckcraft_model::table::MAX_CELLS)));
+            }
+            t.normalize();
             f(t)?;
             t.normalize();
             let (w, h) = (t.width(), t.height());
@@ -319,10 +325,17 @@ fn rows_cols(s: &mut Session, p: &Value, op: &str, name: &'static str) -> Result
     let op = op.to_string();
     with_table(s, p, name, move |t| {
         match op.as_str() {
-            "rowAbove" => t.insert_row(r),
-            "rowBelow" => t.insert_row(r.saturating_add(1)),
-            "colLeft" => t.insert_col(c),
-            "colRight" => t.insert_col(c.saturating_add(1)),
+            "rowAbove" | "rowBelow" | "colLeft" | "colRight" => {
+                let ok = match op.as_str() {
+                    "rowAbove" => t.insert_row(r),
+                    "rowBelow" => t.insert_row(r.saturating_add(1)),
+                    "colLeft" => t.insert_col(c),
+                    _ => t.insert_col(c.saturating_add(1)),
+                };
+                if !ok {
+                    return Err(bad(name, format!("the table is at its {}-cell limit", deckcraft_model::table::MAX_CELLS)));
+                }
+            }
             "delRow" => {
                 if !t.delete_row(r) {
                     return Err(bad(name, "can't delete the last row"));
@@ -469,6 +482,7 @@ fn borders(s: &mut Session, p: &Value) -> Result<Value> {
     }
     // "none" clears to no line, so the table style's own lines don't show through either.
     let line = if which == "none" { Line::none() } else { line };
+    let toggle = bool_or(p, "toggle", false) && which != "none";
     let targets = target_cells(s, p, "table.borders")?;
     with_table(s, p, "table.borders", move |t| {
         let list = targets(t)?;
@@ -478,24 +492,10 @@ fn borders(s: &mut Session, p: &Value) -> Result<Value> {
             return Ok(());
         };
         let (rows, cols) = (t.n_rows(), t.n_cols());
-        // Set one side of a cell and the facing side of its neighbour, as PowerPoint does.
-        let set = |t: &mut Table, r: usize, c: usize, side: usize| {
-            if let Some(cell) = t.cell_mut(r, c) {
-                cell.borders[side] = Some(line.clone());
-            }
-            let n = match side {
-                LEFT => c.checked_sub(1).map(|c| (r, c, RIGHT)),
-                RIGHT => c.checked_add(1).filter(|c| *c < cols).map(|c| (r, c, LEFT)),
-                TOP => r.checked_sub(1).map(|r| (r, c, BOTTOM)),
-                _ => r.checked_add(1).filter(|r| *r < rows).map(|r| (r, c, TOP)),
-            };
-            if let Some((r, c, side)) = n
-                && let Some(cell) = t.cell_mut(r, c)
-            {
-                cell.borders[side] = Some(line.clone());
-            }
-        };
-        for (r, c) in list {
+        // The cell sides (and diagonals) this choice sets.
+        let mut sides: Vec<(usize, usize, usize)> = vec![];
+        let mut diags: Vec<(usize, usize)> = vec![];
+        for &(r, c) in &list {
             if r < r0 || r > r1 || c < c0 || c > c1 {
                 continue;
             }
@@ -515,18 +515,54 @@ fn borders(s: &mut Session, p: &Value) -> Result<Value> {
                     _ => false,
                 };
                 if on {
-                    set(t, r, c, side);
+                    sides.push((r, c, side));
                 }
             }
+            if matches!(which.as_str(), "diagDown" | "diagUp" | "none") {
+                diags.push((r, c));
+            }
+        }
+        // Choosing a border that is already there takes it away again.
+        let present = |t: &Table| {
+            let has = |l: &Option<Line>| l.as_ref() == Some(&line);
+            (!sides.is_empty() || !diags.is_empty())
+                && sides.iter().all(|&(r, c, side)| t.cell(r, c).is_some_and(|cell| has(&cell.borders[side])))
+                && diags.iter().all(|&(r, c)| {
+                    t.cell(r, c).is_some_and(|cell| match which.as_str() {
+                        "diagDown" => has(&cell.diag_down),
+                        _ => has(&cell.diag_up),
+                    })
+                })
+        };
+        let removing = toggle && present(t);
+        let line = if removing { Line::none() } else { line.clone() };
+        let diag = if removing { None } else { Some(line.clone()) };
+        // Set one side of a cell and the facing side of its neighbour, as PowerPoint does.
+        for (r, c, side) in sides {
+            if let Some(cell) = t.cell_mut(r, c) {
+                cell.borders[side] = Some(line.clone());
+            }
+            let n = match side {
+                LEFT => c.checked_sub(1).map(|c| (r, c, RIGHT)),
+                RIGHT => c.checked_add(1).filter(|c| *c < cols).map(|c| (r, c, LEFT)),
+                TOP => r.checked_sub(1).map(|r| (r, c, BOTTOM)),
+                _ => r.checked_add(1).filter(|r| *r < rows).map(|r| (r, c, TOP)),
+            };
+            if let Some((r, c, side)) = n
+                && let Some(cell) = t.cell_mut(r, c)
+            {
+                cell.borders[side] = Some(line.clone());
+            }
+        }
+        for (r, c) in diags {
             if let Some(cell) = t.cell_mut(r, c) {
                 match which.as_str() {
-                    "diagDown" => cell.diag_down = Some(line.clone()),
-                    "diagUp" => cell.diag_up = Some(line.clone()),
-                    "none" => {
+                    "diagDown" => cell.diag_down.clone_from(&diag),
+                    "diagUp" => cell.diag_up.clone_from(&diag),
+                    _ => {
                         cell.diag_down = None;
                         cell.diag_up = None;
                     }
-                    _ => {}
                 }
             }
         }

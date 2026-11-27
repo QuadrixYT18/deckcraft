@@ -73,6 +73,12 @@ fn typed(s: &Session, body: &TextBody, at: Pos, text: &str) -> String {
 }
 
 pub(crate) fn insert_text(s: &mut Session, text: &str, props: Option<RunProps>) -> Result<Value> {
+    // Formatting chosen at this very caret (Bold off, then type) applies to the typed text.
+    let pending = s.typing.take();
+    let props = props.or_else(|| {
+        let (at, p) = pending?;
+        (s.doc().ok()?.selection.text.as_ref() == Some(&at)).then_some(p)
+    });
     let inherited = inherited_aligns_for_edit(s);
     let text = {
         let st = s.doc()?;

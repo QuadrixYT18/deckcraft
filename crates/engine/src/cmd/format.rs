@@ -62,7 +62,15 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         cmd!("format.superscript", "Superscript", ["Home", "Font"], Some("Cmd+Shift+="), "{on?: bool}", has_text_or_shapes, superscript),
         cmd!("format.subscript", "Subscript", ["Home", "Font"], Some("Cmd+="), "{on?: bool}", has_text_or_shapes, subscript),
-        cmd!("format.font", "Font", ["Home", "Font"], None, "{family}", has_text_or_shapes, font),
+        cmd!(
+            "format.font",
+            "Font",
+            ["Home", "Font"],
+            None,
+            "{family, eastAsia?: family, complexScript?: family} — `family` is the Latin typeface (`a:latin`); the other two set the East Asian (`a:ea`) and complex-script (`a:cs`) typefaces, which are left alone when not given",
+            has_text_or_shapes,
+            font
+        ),
         cmd!("format.size", "Font Size", ["Home", "Font"], None, "{size: pt}", has_text_or_shapes, size),
         cmd!("format.grow", "Increase Font Size", ["Home", "Font"], Some("Cmd+Shift+."), "{}", has_text_or_shapes, grow),
         cmd!("format.shrink", "Decrease Font Size", ["Home", "Font"], Some("Cmd+Shift+,"), "{}", has_text_or_shapes, shrink),
@@ -70,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(
             "format.textTransparency",
             "Text Transparency",
-            ["Shape Format", "WordArt Styles"],
+            ["Shape Format", "Decorative Text Styles"],
             None,
             "{value: 0..1} — 0 opaque, 1 invisible; keeps the text's colour (inherited colours included)",
             has_text_or_shapes,
@@ -128,7 +136,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(
             "format.textOutline",
             "Text Outline",
-            ["Shape Format", "WordArt Styles"],
+            ["Shape Format", "Decorative Text Styles"],
             None,
             "{color?, width?: pt} (no color = none)",
             has_text_or_shapes,
@@ -137,7 +145,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(
             "format.textWarp",
             "Text Transform",
-            ["Shape Format", "WordArt Styles"],
+            ["Shape Format", "Decorative Text Styles"],
             None,
             "{preset: a prstTxWarp name or none, adj?: [finite raw guide values, at most 8]} — none clears the transform; omitted adj uses the preset's defaults",
             has_text_or_shapes,
@@ -270,7 +278,11 @@ fn current_run(s: &Session) -> RunProps {
         Some(t) => {
             let Some(body) = super::text::body_of(st, t) else { return RunProps::default() };
             let a = t.ordered().0;
-            let rp = if t.is_range() { ed::props_at(body, (a.0, a.1 + 1)) } else { ed::props_at(body, a) };
+            let rp = match &s.typing {
+                Some((at, props)) if at == t => props.clone(),
+                _ if t.is_range() => ed::props_at(body, (a.0, a.1 + 1)),
+                _ => ed::props_at(body, a),
+            };
             let para = body.paragraphs.get(a.0).cloned().unwrap_or_default();
             (st.shape(t.shape).cloned().unwrap_or_default(), para, rp)
         }

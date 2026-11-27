@@ -115,7 +115,7 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
     let mut sel: usize = ui.data_mut(|d| d.get_temp(sel_id).unwrap_or(0)).min(g.stops.len().saturating_sub(1));
 
     // Preset variations of the first stop's colour.
-    ui.label("Preset gradients");
+    ui.label(tl!("Preset gradients"));
     ui.horizontal_wrapped(|ui| {
         let base = g.stops.first().map(|s| s.color.clone()).unwrap_or(ColorRef::scheme(SchemeSlot::Accent1));
         let mut light = base.clone();
@@ -173,7 +173,7 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
         GradientShape::Path { .. } => "Radial",
     };
     ui.horizontal(|ui| {
-        let field = ui.add_sized(vec2(70.0, 20.0), egui::Label::new("Type"));
+        let field = ui.add_sized(vec2(70.0, 20.0), egui::Label::new(tl!("Type")));
         let combo = craft_ui::ComboBox::from_id_salt((id, "kind")).selected_text(kind).width(120.0).show_ui(ui, |ui| {
             for k in ["Linear", "Radial", "Rectangular", "Path"] {
                 if ui.selectable_label(kind == k, k).clicked() && kind != k {
@@ -194,7 +194,7 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
         let _ = combo.response.labelled_by(field.id);
     });
     ui.horizontal_wrapped(|ui| {
-        ui.add_sized(vec2(70.0, 20.0), egui::Label::new("Direction"));
+        ui.add_sized(vec2(70.0, 20.0), egui::Label::new(tl!("Direction")));
         match &g.shape {
             GradientShape::Linear { angle, .. } => {
                 for (l, a) in DIRECTIONS_LINEAR {
@@ -216,7 +216,7 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
     });
     if let GradientShape::Linear { angle, .. } = &g.shape {
         ui.horizontal(|ui| {
-            ui.add_sized(vec2(70.0, 20.0), egui::Label::new("Angle"));
+            ui.add_sized(vec2(70.0, 20.0), egui::Label::new(tl!("Angle")));
             if let Some(a) = widgets::spinner(ui, &format!("{id}-angle"), "Angle", *angle, 15.0, "°", 70.0) {
                 out = Some(Gradient { shape: GradientShape::Linear { angle: a.rem_euclid(360.0), scaled: false }, ..g.clone() });
             }
@@ -225,13 +225,15 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
 
     // Stop bar: click to add, drag a stop to move it.
     ui.add_space(4.0);
-    ui.label("Gradient stops");
+    ui.label(tl!("Gradient stops"));
     let (bar, bar_resp) = ui.allocate_exact_size(vec2(ui.available_width().min(260.0), 18.0), Sense::click());
     bar_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, "Gradient bar"));
     paint_bar(ui, bar, g, sc);
     let (marks, _) = ui.allocate_exact_size(vec2(bar.width(), 14.0), Sense::hover());
     let drag_id = ui.scope_id().with((id, "drag"));
     let mut dragging: Option<(usize, f64)> = ui.data_mut(|d| d.get_temp(drag_id));
+    // A double-clicked stop opens its colour menu, as in PowerPoint (#2175).
+    let mut open_color = false;
     for (i, s) in g.stops.iter().enumerate() {
         let pos = dragging.filter(|d| d.0 == i).map_or(s.pos, |d| d.1);
         let x = bar.min.x + pos as f32 * bar.width();
@@ -244,6 +246,10 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
         ui.painter().add(egui::Shape::convex_polygon(tri, fill, stroke));
         if resp.clicked() || resp.drag_started() {
             sel = i;
+        }
+        if resp.double_clicked() {
+            sel = i;
+            open_color = true;
         }
         if resp.dragged()
             && let Some(p) = resp.interact_pointer_pos()
@@ -283,11 +289,16 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
     // The selected stop.
     if let Some(s) = g.stops.get(sel) {
         ui.horizontal(|ui| {
-            ui.add_sized(vec2(70.0, 20.0), egui::Label::new("Color"));
+            ui.add_sized(vec2(70.0, 20.0), egui::Label::new(tl!("Color")));
             let (sw, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
             ui.painter().rect(sw, CornerRadius::same(3), c32(&s.color, sc), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
             let r = widgets::drop_button(ui, "", vec2(24.0, 20.0), true);
-            widgets::color_popup(&r).show(|ui| {
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Stop color"));
+            let mut popup = widgets::color_popup(&r);
+            if open_color {
+                popup = popup.open_memory(egui::SetOpenCommand::Bool(true));
+            }
+            popup.show(|ui| {
                 if let Some(Some(c)) = widgets::color_grid(ui, sc, None) {
                     let mut ng = g.clone();
                     ng.stops[sel].color = with_alpha(c, alpha_of(&s.color));
@@ -295,7 +306,7 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
                 }
             });
             let can_remove = g.stops.len() > 2;
-            if ui.add_enabled(can_remove, egui::Button::new("Remove stop")).clicked() {
+            if ui.add_enabled(can_remove, egui::Button::new(tl!("Remove stop"))).clicked() {
                 let mut ng = g.clone();
                 ng.stops.remove(sel);
                 sel = sel.saturating_sub(1);
@@ -303,7 +314,7 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
             }
         });
         ui.horizontal(|ui| {
-            ui.add_sized(vec2(70.0, 20.0), egui::Label::new("Position"));
+            ui.add_sized(vec2(70.0, 20.0), egui::Label::new(tl!("Position")));
             if let Some(v) = widgets::spinner(ui, &format!("{id}-pos-{sel}"), "Position", (s.pos * 100.0).round(), 5.0, "%", 70.0) {
                 let mut ng = g.clone();
                 ng.stops[sel].pos = (v / 100.0).clamp(0.0, 1.0);
@@ -312,7 +323,7 @@ pub fn gradient_editor(ui: &mut Ui, id: &str, g: &Gradient, sc: &ColorScheme) ->
             }
         });
         ui.horizontal(|ui| {
-            let label = ui.add_sized(vec2(70.0, 20.0), egui::Label::new("Transparency"));
+            let label = ui.add_sized(vec2(70.0, 20.0), egui::Label::new(tl!("Transparency")));
             let key = ui.scope_id().with((id, "tr", sel));
             let mut tr: f32 = ui.data_mut(|d| d.get_temp(key).unwrap_or(((1.0 - alpha_of(&s.color)) * 100.0) as f32));
             let r = ui.add(egui::Slider::new(&mut tr, 0.0..=100.0).suffix("%")).labelled_by(label.id);
@@ -479,7 +490,7 @@ pub fn pattern_editor(ui: &mut Ui, pt: &PatternFill, sc: &ColorScheme) -> Option
     let t = Tokens::get(ui.ctx());
     let mut out: Option<PatternFill> = None;
     let (fg, bg) = (c32(&pt.fg, sc), c32(&pt.bg, sc));
-    ui.label("Pattern");
+    ui.label(tl!("Pattern"));
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
         for name in pattern_gallery() {
@@ -516,7 +527,58 @@ pub fn pattern_editor(ui: &mut Ui, pt: &PatternFill, sc: &ColorScheme) -> Option
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use super::*;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+
+    /// #2175: double-clicking a gradient stop selects it and opens its colour menu; a colour
+    /// picked there colours that stop.
+    #[test]
+    fn double_clicking_a_stop_opens_its_color_menu() {
+        let sc = deckcraft_model::Theme::default().colors;
+        let start = Gradient {
+            stops: vec![
+                GradientStop { pos: 0.0, color: ColorRef::scheme(SchemeSlot::Accent1) },
+                GradientStop { pos: 1.0, color: ColorRef::scheme(SchemeSlot::Accent2) },
+            ],
+            ..default_gradient(ColorRef::scheme(SchemeSlot::Accent1), 90.0)
+        };
+        // The gradient, and whether the interface fonts are in (they apply from the next frame).
+        let mut h = Harness::builder().with_size(vec2(400.0, 700.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            move |ui, (g, fonts): &mut (Gradient, bool)| {
+                if !*fonts {
+                    theme::install_fonts(ui.ctx());
+                    *fonts = true;
+                    return;
+                }
+                if let Some(ng) = gradient_editor(ui, "test-grad", &g.clone(), &sc) {
+                    *g = ng;
+                }
+            },
+            (start, false),
+        );
+        h.run_steps(3);
+        assert!(h.query_by_label("Theme Colors").is_none(), "the menu starts closed");
+        let stop = h.get_by_label("Gradient stop 2").rect().center();
+        h.hover_at(stop);
+        h.run_steps(1);
+        for _ in 0..2 {
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton { pos: stop, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+                h.run_steps(1);
+            }
+        }
+        h.run_steps(2);
+        assert!(h.query_by_label("Theme Colors").is_some(), "the colour menu opened");
+        h.get_by_label(SchemeSlot::Accent6.label()).click();
+        h.run_steps(2);
+        let g = &h.state().0;
+        assert_eq!(g.stops.len(), 2, "no stop was added");
+        assert_eq!(g.stops[1].color, ColorRef::scheme(SchemeSlot::Accent6), "the double-clicked stop took the colour");
+        assert_eq!(g.stops[0].color, ColorRef::scheme(SchemeSlot::Accent1));
+    }
 
     #[test]
     fn gradient_json_retains_flip_mode() {

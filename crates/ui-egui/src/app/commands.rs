@@ -1,6 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use super::updates_ui;
 use super::{SlideApp, UI_COMMANDS, Value, ViewMode, backstage, dialogs, doc_window, json, media, qat, theme};
+use crate::i18n;
 
 fn grid_options_touched(p: &Value) -> bool {
     ["spacing", "snap", "smartGuides", "gridlines", "guides"].iter().any(|k| p.get(*k).is_some())
@@ -41,6 +42,13 @@ impl SlideApp {
         }
         self.drain_requests();
         r
+    }
+
+    /// The `language` setting, the language the interface is drawn in, and every one it can be
+    /// (`app.language`).
+    fn language_state(&self) -> Value {
+        let available: Vec<Value> = i18n::Lang::all().map(|l| json!({"code": l.code(), "name": l.name()})).collect();
+        json!({"language": self.ui.language, "current": i18n::Lang::from_pref(&self.ui.language).code(), "available": available})
     }
 
     fn flag(&mut self, params: &Value, cur: bool) -> bool {
@@ -226,19 +234,56 @@ impl SlideApp {
                 return Ok(json!({"printed": self.print_pdf(p.clone())}));
             }
             "app.about" => self.dialog = Some(dialogs::Dialog::new("about")),
+            "live.dialog" => self.dialog = Some(dialogs::Dialog::new("live")),
+            "picture.cropMode" => {
+                let picture = self.session.active().and_then(|d| {
+                    let id = *d.selection.shapes.first()?;
+                    matches!(d.shape(id)?.kind, deckcraft_model::ShapeKind::Picture { .. }).then_some(id)
+                });
+                let on = self.flag(p, self.ui.crop.is_some());
+                if on && picture.is_none() {
+                    return Err("select a picture to crop".into());
+                }
+                self.ui.crop = if on { picture } else { None };
+                return Ok(json!({"on": self.ui.crop.is_some()}));
+            }
+            "live.start" | "live.join" => {
+                let server = p.get("server").and_then(Value::as_str).ok_or("missing `server`")?;
+                let name = p.get("name").and_then(Value::as_str).unwrap_or(self.session.prefs.author.as_str()).to_string();
+                if id == "live.start" {
+                    crate::live::start(self, server, &name)?;
+                } else {
+                    let code = p.get("code").and_then(Value::as_str).ok_or("missing `code`")?;
+                    crate::live::join(self, server, &name, code)?;
+                }
+                return Ok(json!({"started": true}));
+            }
+            "live.leave" => crate::live::leave(self),
+            "live.status" => return Ok(crate::live::status_json(self)),
             "app.checkUpdates" => {
+                // Nightly is updated by ArtCraft Launcher; its stable updater must stay idle.
                 #[cfg(not(target_arch = "wasm32"))]
-                updates_ui::request_check(self);
+                updates_ui::request_check(self)?;
                 #[cfg(target_arch = "wasm32")]
                 return Err("updates are handled by the browser: reload the page".into());
             }
             "app.palette" => self.palette = Some((String::new(), 0)),
             "app.preferences" => self.dialog = Some(dialogs::Dialog::new("preferences")),
+            "app.language" => {
+                if let Some(v) = p.get("language") {
+                    let code = v.as_str().and_then(i18n::normalize_pref).ok_or_else(|| {
+                        let offered: Vec<&str> = std::iter::once(i18n::AUTO).chain(i18n::Lang::all().map(i18n::Lang::code)).collect();
+                        format!("`language` must be one of {}", offered.join(", "))
+                    })?;
+                    self.ui.language = code.to_string();
+                }
+                return Ok(self.language_state());
+            }
             "app.openDialog" => self.pick_and_open(),
             "app.insertPictureDialog" => self.pick_and_insert("picture", "insert.picture"),
             "app.smartArtPictureDialog" => {
                 if self.services.pick_open.is_none() {
-                    return Err("picking a SmartArt picture needs the desktop app".into());
+                    return Err("picking a Diagram picture needs the desktop app".into());
                 }
                 self.pick_and_run("picture", "smartArt.picture", p);
             }

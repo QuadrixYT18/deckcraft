@@ -103,6 +103,8 @@ pub(super) fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
             hf.hide_on_title = v;
         }
         let hf = hf.clone();
+        // The language a `{date}` in the footer is written in: the deck's own text's.
+        let lang = deck_lang(doc);
         let date_given = str_param(p, "dateText").is_some();
         let format_given = str_param(p, "dateFormat").is_some();
         let all = bool_or(p, "all", true);
@@ -159,7 +161,7 @@ pub(super) fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
                                 ..Default::default()
                             },
                             PhType::Date => TextBody::from_text(&hf.date_text),
-                            _ => TextBody::from_text(&hf.footer_text),
+                            _ => footer_body(&hf.footer_text, &hf.date_format, lang.as_deref()),
                         };
                         sl.shapes.push(Shape {
                             id: new_ids.get(n).copied().unwrap_or_default(),
@@ -171,15 +173,49 @@ pub(super) fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
                     }
                     (Some(pos), true) if k == PhType::Footer => {
                         if let Some(sh) = sl.shapes.get_mut(pos) {
-                            sh.text = Some(TextBody::from_text(&hf.footer_text));
+                            sh.text = Some(footer_body(&hf.footer_text, &hf.date_format, lang.as_deref()));
                         }
                     }
                     (Some(pos), true) if k == PhType::Date && (date_given || format_given) => {
                         if let Some(sh) = sl.shapes.get_mut(pos) {
-                            set_date(sh, &hf.date_text, &hf.date_format);
+                            // The deck's format always travels; whether the caller asked for it
+                            // is what decides if it may rewrite a field the slide already has
+                            // (see `set_date`).
+                            set_date(sh, &hf.date_text, &hf.date_format, format_given);
                         }
                     }
                     _ => {}
+                }
+            }
+            // A layout without a date placeholder (many corporate templates put the date in the
+            // footer line): the date goes at the end of the footer instead of being dropped.
+            if want(PhType::Date)
+                && !sl.shapes.iter().any(|x| x.ph_type() == Some(PhType::Date))
+                && let Some(foot) = sl.shapes.iter_mut().find(|x| x.ph_type() == Some(PhType::Footer))
+            {
+                let body = foot.text.get_or_insert_with(TextBody::default);
+                let has_date = body
+                    .paragraphs
+                    .iter()
+                    .flat_map(|p| &p.runs)
+                    .any(|r| matches!(&r.kind, RunKind::Field { field } if deckcraft_text::datetime::is_date_field(field)));
+                if !has_date {
+                    if body.paragraphs.is_empty() {
+                        body.paragraphs.push(deckcraft_model::Paragraph::default());
+                    }
+                    if let Some(para) = body.paragraphs.last_mut() {
+                        let props = para.runs.last().map(|r| r.props.clone()).unwrap_or_default();
+                        let sep = if para.text().trim().is_empty() || para.text().ends_with(' ') { "" } else { " " };
+                        if !sep.is_empty() {
+                            para.runs.push(Run { text: sep.into(), props: props.clone(), kind: RunKind::Text });
+                        }
+                        let date = if hf.date_text.is_empty() {
+                            Run { text: date_now(&hf.date_format), props, kind: RunKind::Field { field: date_kind(&hf.date_format).into() } }
+                        } else {
+                            Run { text: hf.date_text.clone(), props, kind: RunKind::Text }
+                        };
+                        para.runs.push(date);
+                    }
                 }
             }
         }
@@ -200,8 +236,19 @@ fn date_now(format: &str) -> String {
 }
 
 /// Point a slide's date placeholder at a fixed date (its own plain text) or, for an empty
-/// `fixed`, at an automatic date field (one it already has keeps its format).
-fn set_date(sh: &mut Shape, fixed: &str, format: &str) {
+/// `fixed`, at an automatic date field.
+///
+/// `format_given` is whether the caller named a format. The dialog always sends `dateText`, so an
+/// Apply with no format selection reached here carrying the deck's global format and rewrote a
+/// slide's own `datetime11` field to it -- a format the caller never mentioned. A field the slide
+/// already has therefore keeps its own format unless one was asked for.
+///
+/// That holds only where there *is* a field to keep. A placeholder showing a fixed date has no
+/// date field and no format of its own, so clearing `dateText` without naming a format used to
+/// build a `datetime1`: a slide that went from `datetime11` to fixed text and back came away on
+/// the short date. With nothing to preserve, the deck's remembered format is the right one to
+/// take (noted in review).
+fn set_date(sh: &mut Shape, fixed: &str, format: &str, format_given: bool) {
     let runs = || sh.text.iter().flat_map(|t| &t.paragraphs).flat_map(|p| &p.runs);
     let field_now = runs().find_map(|r| match &r.kind {
         RunKind::Field { field } if deckcraft_text::datetime::is_date_field(field) => Some(field.clone()),
@@ -209,6 +256,7 @@ fn set_date(sh: &mut Shape, fixed: &str, format: &str) {
     });
     let has_field = field_now.is_some();
     let props = runs().next().map(|r| r.props.clone()).unwrap_or_default();
+    let format = if format_given || !has_field { format } else { "" };
     let want = date_kind(format);
     let (text, kind) = match fixed {
         // Automatic: keep the field, but follow a format that has changed.
@@ -220,6 +268,61 @@ fn set_date(sh: &mut Shape, fixed: &str, format: &str) {
     };
     let para = deckcraft_model::Paragraph { runs: vec![Run { text, props, kind }], ..Default::default() };
     sh.text = Some(TextBody { paragraphs: vec![para], ..sh.text.clone().unwrap_or_default() });
+}
+
+/// The words that stand for today's date in footer text.
+const DATE_TOKENS: [&str; 2] = ["{date}", "{datum}"];
+
+/// The footer text as a text body, each `{date}` (or `{datum}`) in it an automatic date field in
+/// the deck's date format and language, so "DB Fernverkehr | {date}" shows today's date.
+fn footer_body(text: &str, format: &str, lang: Option<&str>) -> TextBody {
+    let mut body = TextBody::from_text(text);
+    for para in &mut body.paragraphs {
+        let mut runs = vec![];
+        for run in std::mem::take(&mut para.runs) {
+            if !matches!(run.kind, RunKind::Text) || !DATE_TOKENS.iter().any(|t| run.text.to_lowercase().contains(t)) {
+                runs.push(run);
+                continue;
+            }
+            let mut rest = run.text.as_str();
+            while let Some((at, len)) = DATE_TOKENS.iter().filter_map(|t| rest.to_lowercase().find(t).map(|at| (at, t.len()))).min() {
+                if at > 0 {
+                    runs.push(Run { text: rest[..at].into(), props: run.props.clone(), kind: RunKind::Text });
+                }
+                let mut props = run.props.clone();
+                if props.lang.is_none() {
+                    props.lang = lang.map(str::to_string);
+                }
+                let kind = date_kind(format);
+                let shown = deckcraft_text::datetime::DateTime::now_local()
+                    .and_then(|now| deckcraft_text::datetime::field_text(kind, props.lang.as_deref(), now))
+                    .unwrap_or_else(|| date_now(format));
+                runs.push(Run { text: shown, props, kind: RunKind::Field { field: kind.into() } });
+                rest = &rest[at + len..];
+            }
+            if !rest.is_empty() {
+                runs.push(Run { text: rest.into(), props: run.props.clone(), kind: RunKind::Text });
+            }
+        }
+        para.runs = runs;
+    }
+    body
+}
+
+/// The language of the first text run in the deck that names one.
+fn deck_lang(doc: &deckcraft_model::Presentation) -> Option<String> {
+    let mut found = None;
+    for sl in &doc.slides {
+        deckcraft_model::walk(&sl.shapes, &mut |sh, _| {
+            if found.is_none() {
+                found = sh.text.as_ref().and_then(|t| t.paragraphs.iter().flat_map(|p| &p.runs).find_map(|r| r.props.lang.clone()));
+            }
+        });
+        if found.is_some() {
+            break;
+        }
+    }
+    found
 }
 
 /// Today's local date as a `datetime1` field shows it (M/D/YYYY): the saved text of a new date
@@ -248,6 +351,68 @@ pub fn civil(z: i64) -> (i64, u32, u32) {
             (i64::try_from(y).unwrap_or(if y < 0 { i64::MIN } else { i64::MAX }), d.month(), d.day())
         }
         None => (1970, 1, 1),
+    }
+}
+
+#[cfg(test)]
+mod footer_date_tests {
+    use std::sync::Arc;
+
+    use deckcraft_model::PhType;
+    use serde_json::json;
+
+    use crate::Session;
+
+    /// The footer line of slide `i`.
+    fn footer(s: &Session, i: usize) -> String {
+        let d = &s.doc().unwrap().doc;
+        d.slides[i].shapes.iter().find(|x| x.ph_type() == Some(PhType::Footer)).and_then(|x| x.text.as_ref()).map(|t| t.text()).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_layout_without_a_date_place_gets_the_date_in_the_footer() {
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({"title": "Aufbau"})).unwrap();
+        // A corporate template: the layouts have a footer but no date placeholder.
+        let st = s.doc_mut().unwrap();
+        let doc = Arc::make_mut(&mut st.doc);
+        for m in &mut doc.masters {
+            for l in &mut Arc::make_mut(m).layouts {
+                l.shapes.retain(|x| x.ph_type() != Some(PhType::Date));
+            }
+        }
+        s.execute("design.headerFooter", &json!({"date": true, "footer": true, "footerText": "DB Fernverkehr |", "all": true})).unwrap();
+        let line = footer(&s, 1);
+        assert!(line.starts_with("DB Fernverkehr | ") && line.len() > "DB Fernverkehr | ".len(), "{line:?}");
+        // Applying again doesn't add a second date; turning the date off takes it away.
+        s.execute("design.headerFooter", &json!({"date": true, "footer": true, "footerText": "DB Fernverkehr |", "all": true})).unwrap();
+        assert_eq!(footer(&s, 1), line);
+        s.execute("design.headerFooter", &json!({"date": false, "footer": true, "footerText": "DB Fernverkehr |", "all": true})).unwrap();
+        assert_eq!(footer(&s, 1), "DB Fernverkehr |");
+    }
+
+    #[test]
+    fn date_in_the_footer_text_becomes_todays_date() {
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({"title": "Aufbau"})).unwrap();
+        s.execute("design.headerFooter", &json!({"footer": true, "footerText": "DB Fernverkehr | {date}", "all": true})).unwrap();
+        let line = footer(&s, 1);
+        assert!(line.starts_with("DB Fernverkehr | ") && !line.contains('{'), "{line:?}");
+        // It is a date field (it updates), and the date checkbox adds no second date.
+        let d = &s.doc().unwrap().doc;
+        let foot = d.slides[1].shapes.iter().find(|x| x.ph_type() == Some(PhType::Footer)).unwrap();
+        let fields = foot
+            .text
+            .as_ref()
+            .unwrap()
+            .paragraphs
+            .iter()
+            .flat_map(|p| &p.runs)
+            .filter(|r| matches!(r.kind, deckcraft_model::text::RunKind::Field { .. }))
+            .count();
+        assert_eq!(fields, 1);
+        s.execute("design.headerFooter", &json!({"date": true, "footer": true, "footerText": "DB Fernverkehr | {Datum}", "all": true})).unwrap();
+        assert_eq!(footer(&s, 1), line);
     }
 }
 
@@ -296,6 +461,55 @@ mod header_footer_date_tests {
         assert_eq!(got[0].1.as_deref(), Some(kind));
         assert!(got[0].0 == before || got[0].0 == after, "{got:?} is neither {before:?} nor {after:?}");
         got[0].0.clone()
+    }
+
+    /// The dialog always sends `dateText`, so an Apply with no format selection reached
+    /// `set_date` with the deck's global format and rewrote a slide's own date field to it. The
+    /// format the caller did not mention is not a format the caller asked for (noted in review).
+    #[test]
+    fn an_apply_with_no_format_leaves_each_slides_own_format_alone() {
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({})).unwrap();
+        s.execute("design.headerFooter", &json!({"date": true, "dateFormat": "datetime11", "all": true})).unwrap();
+        let kinds = |s: &Session| dates(s).into_iter().map(|(_, k)| k).collect::<Vec<_>>();
+        assert_eq!(kinds(&s), vec![Some("datetime11".to_string()); 2], "both slides start on the time format");
+
+        // One slide alone takes a different format, which also becomes the deck's global one.
+        s.execute("design.headerFooter", &json!({"date": true, "dateFormat": "datetime5", "all": false})).unwrap();
+        assert_eq!(kinds(&s), vec![Some("datetime11".to_string()), Some("datetime5".to_string())]);
+        assert_eq!(s.doc().unwrap().doc.header_footer.date_format, "datetime5");
+
+        // Apply with no `dateFormat`: the first slide keeps datetime11 rather than being rewritten
+        // to the global datetime5.
+        s.execute("design.headerFooter", &json!({"date": true, "dateText": "", "all": true})).unwrap();
+        assert_eq!(kinds(&s), vec![Some("datetime11".to_string()), Some("datetime5".to_string())], "neither slide was rewritten");
+
+        // And a format that *is* given still reaches every slide, so the guard is not a block.
+        s.execute("design.headerFooter", &json!({"date": true, "dateFormat": "datetime2", "all": true})).unwrap();
+        assert_eq!(kinds(&s), vec![Some("datetime2".to_string()); 2], "a format the caller asked for still applies");
+    }
+
+    /// A fixed date is plain text, so the placeholder has no date field and no format of its
+    /// own. Clearing `dateText` without naming a format therefore has nothing to preserve, and
+    /// built a `datetime1`: a slide that went from `datetime11` to fixed text and back came away
+    /// on the short date (noted in review).
+    #[test]
+    fn a_fixed_date_turned_automatic_again_comes_back_on_the_remembered_format() {
+        let mut s = Session::with_new();
+        run_automatic(&mut s, json!({"date": true, "dateFormat": "datetime11", "all": true}), "datetime11");
+
+        s.execute("design.headerFooter", &json!({"date": true, "dateText": "4 July 1776", "all": true})).unwrap();
+        assert_eq!(dates(&s), vec![("4 July 1776".to_string(), None)], "fixed: plain text, no field");
+
+        // No `dateFormat` in this call, which is what the dialog sends on an Apply.
+        run_automatic(&mut s, json!({"date": true, "dateText": "", "all": true}), "datetime11");
+
+        // And the guard this must not undo: where there *is* a field, an Apply naming no format
+        // still leaves the slide's own format alone, although the deck's format now reaches
+        // `set_date` either way.
+        s.execute("design.headerFooter", &json!({"date": true, "dateFormat": "datetime5", "all": false})).unwrap();
+        s.execute("design.headerFooter", &json!({"date": true, "dateText": "", "all": true})).unwrap();
+        assert_eq!(dates(&s)[0].1.as_deref(), Some("datetime5"), "the slide's own format survives");
     }
 
     /// Header & Footer's automatic date takes the format it is given. `HeaderFooter::date_format`

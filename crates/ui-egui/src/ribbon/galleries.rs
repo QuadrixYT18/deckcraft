@@ -144,6 +144,21 @@ pub fn shapes_gallery(ui: &mut Ui) -> Option<&'static str> {
                         out = Some(p.name);
                     }
                 }
+                if cat == deckcraft_geom::preset::Category::BlockArrows {
+                    for (name, label, outline) in deckcraft_engine::tools::CUSTOM_SHAPES {
+                        let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
+                        if resp.hovered() {
+                            ui.painter().rect_filled(r, CornerRadius::same(3), t.hover);
+                        }
+                        let b = r.shrink(5.0);
+                        let pts: Vec<egui::Pos2> =
+                            outline.iter().map(|(fx, fy)| egui::pos2(b.min.x + *fx as f32 * b.width(), b.min.y + *fy as f32 * b.height())).collect();
+                        ui.painter().add(egui::Shape::closed_line(pts, egui::Stroke::new(1.0, t.text)));
+                        if resp.on_hover_text(label).clicked() {
+                            out = Some(name);
+                        }
+                    }
+                }
                 if cat == deckcraft_geom::preset::Category::Lines {
                     for (name, label) in deckcraft_engine::tools::FREEFORM_TOOLS {
                         let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
@@ -296,7 +311,7 @@ pub fn effects_menu(app: &mut SlideApp, ui: &mut Ui) {
         }
     });
     ui.menu_button("Glow", |ui| {
-        if ui.button("No Glow").clicked() {
+        if ui.button(tl!("No Glow")).clicked() {
             run(app, "shape.effects", json!({"glow": null}));
         }
         for r in [5.0, 8.0, 11.0, 18.0] {
@@ -333,7 +348,7 @@ pub fn effects_menu(app: &mut SlideApp, ui: &mut Ui) {
             }
         }
     });
-    if ui.button("Format Shape…").clicked() {
+    if ui.button(tl!("Format Shape…")).clicked() {
         let _ = app.run("view.pane", json!({"pane": "format", "tab": "effects"}));
     }
 }

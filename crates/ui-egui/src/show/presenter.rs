@@ -153,6 +153,11 @@ pub(super) fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &std::
             if !keyboard(ui.ctx(), show, doc, now, true) {
                 *keep = false;
             }
+            // Swapped last time: put the windows that way again once both are open.
+            if show.swap_displays && !show.swap_done && ui.ctx().input(|i| i.viewport().outer_rect.is_some()) {
+                show.swap_done = true;
+                swap_displays(ui.ctx());
+            }
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
             let elapsed = show.timer.elapsed(now);
             let paused = show.timer.paused();
@@ -170,6 +175,14 @@ pub(super) fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &std::
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if button(ui, "End Show").clicked() {
                             *keep = false;
+                        }
+                        if button(ui, tl!("Swap Displays"))
+                            .on_hover_text(tl!("Show the presentation where this window is, and this window where the presentation is"))
+                            .clicked()
+                        {
+                            show.swap_displays = !show.swap_displays;
+                            show.swap_done = true;
+                            swap_displays(ui.ctx());
                         }
                         if button(ui, "Next ▶").clicked() {
                             actions.push(show.state.next(doc));
@@ -261,12 +274,12 @@ pub(super) fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &std::
                 let notes_head = Rect::from_min_size(pos2(right.min.x, nr.max.y + 12.0), vec2(right.width(), 28.0));
                 let mut head = ui.new_child(egui::UiBuilder::new().max_rect(notes_head));
                 head.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Notes").size(13.0).color(Color32::from_gray(170)));
-                    if ui.button("A-").clicked() {
+                    ui.label(egui::RichText::new(tl!("Notes")).size(13.0).color(Color32::from_gray(170)));
+                    if ui.button(tl!("A-")).clicked() {
                         show.nudge_notes(-NOTES_STEP);
                     }
                     ui.label(egui::RichText::new(format!("{}", show.notes_px as i32)).size(13.0).color(Color32::from_gray(200)));
-                    if ui.button("A+").clicked() {
+                    if ui.button(tl!("A+")).clicked() {
                         show.nudge_notes(NOTES_STEP);
                     }
                 });
@@ -294,8 +307,23 @@ pub(super) fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &std::
 pub(super) fn presenter_notes(ui: &mut Ui, notes: &deckcraft_model::text::TextBody, px: f32) -> egui::Response {
     let color = Color32::from_gray(230);
     if notes.text().is_empty() {
-        ui.label(egui::RichText::new("No notes.").size(px).color(color))
+        ui.label(egui::RichText::new(tl!("No notes.")).size(px).color(color))
     } else {
         crate::notes::view(ui, notes, &crate::notes::Look { size: px, color: Some(color) })
     }
+}
+
+/// Swap Displays: the audience window (the main window, full screen) moves to where the Presenter
+/// View is, and the Presenter View to where the audience was. Each window goes to the other's
+/// top-left corner, so it lands on the other's display.
+fn swap_displays(ctx: &egui::Context) {
+    let presenter = ctx.input(|i| i.viewport().outer_rect);
+    let audience = ctx.input_for(egui::ViewportId::ROOT, |i| i.viewport().outer_rect);
+    let (Some(p), Some(a)) = (presenter, audience) else { return };
+    let root = egui::ViewportId::ROOT;
+    ctx.send_viewport_cmd_to(root, egui::ViewportCommand::Fullscreen(false));
+    ctx.send_viewport_cmd_to(root, egui::ViewportCommand::OuterPosition(p.min + egui::vec2(20.0, 20.0)));
+    ctx.send_viewport_cmd_to(root, egui::ViewportCommand::Fullscreen(true));
+    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(a.min + egui::vec2(20.0, 20.0)));
+    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
 }

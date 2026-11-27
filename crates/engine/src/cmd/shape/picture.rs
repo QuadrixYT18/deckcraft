@@ -14,6 +14,25 @@ pub(super) fn crop(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+pub(super) fn crop_to(s: &mut Session, p: &Value) -> Result<Value> {
+    let r = p.get("rect").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect::<Vec<f64>>()).unwrap_or_default();
+    let [x, y, w, h] = r[..] else { return Err(bad("picture.cropTo", "`rect` must be [x, y, w, h]")) };
+    let rect = deckcraft_geom::Xfrm::new(x, y, w, h);
+    edit_geometry(s, p, "picture.cropTo", |sh| {
+        let deckcraft_model::ShapeKind::Picture { fill } = &mut sh.kind else { return Err(bad("picture.cropTo", "not a picture")) };
+        let b = sh.xfrm.ok_or_else(|| bad("picture.cropTo", "the picture has no box of its own (a placeholder picture)"))?;
+        if b.rot.abs() > 0.01 {
+            // The handles and `rect` are in slide axes; a turned picture would crop askew.
+            return Err(bad("picture.cropTo", "rotate the picture back to 0° to crop it by dragging"));
+        }
+        let (nb, crop) =
+            crate::tools::picture_crop_to(b, fill.crop, rect).ok_or_else(|| bad("picture.cropTo", "nothing of the picture would be left"))?;
+        fill.crop = crop;
+        sh.xfrm = Some(nb);
+        Ok(())
+    })
+}
+
 pub(super) fn picture_adjust(s: &mut Session, p: &Value) -> Result<Value> {
     edit_shapes(s, p, "picture.adjust", |sh| {
         if let deckcraft_model::ShapeKind::Picture { fill } = &mut sh.kind {
@@ -112,4 +131,65 @@ pub(super) fn media_options(s: &mut Session, p: &Value) -> Result<Value> {
         Ok(())
     })?;
     Ok(json!({}))
+}
+
+#[cfg(test)]
+mod crop_to_tests {
+    use serde_json::json;
+
+    use crate::Session;
+
+    fn picture(s: &mut Session) -> deckcraft_model::ShapeId {
+        // A 2x1 PNG.
+        let png = image_png();
+        let r = s.execute("insert.picture", &json!({"data": png, "name": "p.png", "rect": [100, 100, 400, 200]})).unwrap();
+        deckcraft_model::ShapeId(r["id"].as_u64().unwrap() as u32)
+    }
+
+    fn image_png() -> String {
+        let img = image::RgbaImage::from_pixel(2, 1, image::Rgba([200, 30, 30, 255]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageFormat::Png).unwrap();
+        crate::cmd::base64_encode(out.get_ref())
+    }
+
+    fn state(s: &Session, id: deckcraft_model::ShapeId) -> (deckcraft_geom::Xfrm, [f64; 4]) {
+        let sh = s.doc().unwrap().shape(id).cloned().unwrap();
+        let deckcraft_model::ShapeKind::Picture { fill } = sh.kind else { panic!() };
+        (sh.xfrm.unwrap(), fill.crop)
+    }
+
+    #[test]
+    fn cropping_keeps_the_image_in_place_and_uncropping_brings_it_back() {
+        let mut s = Session::with_new();
+        let id = picture(&mut s);
+        let (before, _) = state(&s, id);
+        let full = crate::tools::picture_full_rect(before, [0.0; 4]);
+        // Keep the left half.
+        s.execute("picture.cropTo", &json!({"ids": [id.0], "rect": [100, 100, 200, 200]})).unwrap();
+        let (b, c) = state(&s, id);
+        assert!(b.w < before.w && c[2] > 0.4, "box {b:?} crop {c:?}");
+        // The image itself has not moved or stretched.
+        let still = crate::tools::picture_full_rect(b, c);
+        assert!((still.x - full.x).abs() < 1e-6 && (still.w - full.w).abs() < 1e-6, "{still:?} vs {full:?}");
+        // Dragging the edge back out (even past the image) restores it, never more.
+        s.execute("picture.cropTo", &json!({"ids": [id.0], "rect": [0, 0, 960, 540]})).unwrap();
+        let (b, c) = state(&s, id);
+        assert!((b.w - before.w).abs() < 1e-6 && c.iter().all(|v| v.abs() < 1e-9), "{b:?} {c:?}");
+        // One undo step per crop.
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert!(state(&s, id).0.w < before.w);
+    }
+
+    #[test]
+    fn a_flipped_picture_crops_the_side_that_is_shown() {
+        let mut s = Session::with_new();
+        let id = picture(&mut s);
+        s.execute("arrange.flipHorizontal", &json!({"ids": [id.0]})).unwrap();
+        assert!(state(&s, id).0.flip_h);
+        s.execute("picture.cropTo", &json!({"ids": [id.0], "rect": [100, 100, 200, 200]})).unwrap();
+        let (_, c) = state(&s, id);
+        // The left of the box shows the image's right side.
+        assert!(c[0] > 0.4 && c[2].abs() < 1e-9, "{c:?}");
+    }
 }

@@ -493,6 +493,9 @@ pub struct Session {
     pub(crate) untitled: u32,
     /// Format Painter: copied shape/text formatting and whether it stays on (double-click).
     pub painter: Option<(cmd::format::Painted, bool)>,
+    /// Formatting chosen with only a caret (Bold off, a font, …): what the next text typed at
+    /// exactly that caret gets. Any other caret or selection ignores it.
+    pub typing: Option<(TextSel, deckcraft_model::text::RunProps)>,
     /// Animation Painter: copied shape animations and whether it stays on (double-click).
     pub anim_painter: Option<(Vec<deckcraft_model::anim::Animation>, bool)>,
     /// Set as Default Shape: the look new shapes get.
@@ -541,6 +544,7 @@ impl Session {
             untitled: 0,
             default_look: None,
             painter: None,
+            typing: None,
             anim_painter: None,
             depth: 0,
             recovery_dir: None,
@@ -646,7 +650,9 @@ impl Session {
             self.settle_composition();
         }
         if let Err(e) = (spec.enabled)(self) {
-            let named = (e == cmd::NOTHING_SELECTED || e == cmd::SELECT_TWO) && (params.get("ids").is_some() || params.get("id").is_some());
+            // A command told which shapes to act on doesn't depend on what is selected.
+            let named = (e == cmd::NOTHING_SELECTED || e == cmd::SELECT_TWO || e == cmd::merge::IN_GROUP)
+                && (params.get("ids").is_some() || params.get("id").is_some());
             if !named {
                 return Err(EngineError::Disabled(id.into(), e));
             }
@@ -772,6 +778,63 @@ impl Session {
         self.composition_settles
     }
 
+    /// Apply a change someone else made (a live session's peer) to the document `uid`.
+    ///
+    /// `change` maps a presentation to the same presentation with the other person's edit in it.
+    /// It is applied to the document and to every undo and redo step, the gesture in progress and
+    /// an input method's composition, so that Undo takes back only this user's own edits and never
+    /// someone else's. The change is not an undo step, not a journal entry and doesn't dirty
+    /// the selection: the same slide stays current (found by id), selected shapes and a text caret
+    /// that no longer exist are dropped, and a caret past the end of changed text moves to its end.
+    /// Returns `false` when no open document has that uid.
+    pub fn apply_remote(&mut self, uid: u64, change: &dyn Fn(&Presentation) -> Presentation) -> bool {
+        let Some(st) = self.docs.iter_mut().find(|d| d.uid == uid) else { return false };
+        let current = st.doc.slides.get(st.selection.slide).map(|s| s.id);
+        st.doc = Arc::new(change(&st.doc));
+        let costs = std::mem::take(&mut st.history.costs);
+        for e in st.history.undo.iter_mut().chain(st.history.redo.iter_mut()) {
+            let old = Arc::as_ptr(&e.doc) as usize;
+            e.doc = Arc::new(change(&e.doc));
+            // An estimate kept under the step's new address: the remote edit changes little.
+            if let Some(c) = costs.get(&old) {
+                st.history.costs.insert(Arc::as_ptr(&e.doc) as usize, *c);
+            }
+            if let Some(i) = current.and_then(|id| e.doc.slides.iter().position(|s| s.id == id)) {
+                e.selection.slide = i;
+            }
+        }
+        if let Some(i) = st.interaction.as_mut() {
+            i.doc = Arc::new(change(&i.doc));
+        }
+        if let Some(c) = st.composition.as_mut() {
+            c.before = Arc::new(change(&c.before));
+        }
+        if let Some(i) = current.and_then(|id| st.doc.slides.iter().position(|s| s.id == id)) {
+            st.selection.slide = i;
+        }
+        let composing = st.composition.is_some();
+        clamp_selection(st);
+        clamp_text_selection(st);
+        st.revision += 1;
+        if composing && st.composition.is_none() {
+            // The platform still holds that composition: the host must interrupt it.
+            self.composition_settles = self.composition_settles.wrapping_add(1);
+        }
+        true
+    }
+
+    /// Change the document `uid` without an undo step or anything else noticing (a live session
+    /// keeps the id counter inside the id block its server gave this user).
+    pub fn adjust_document(&mut self, uid: u64, f: impl FnOnce(&mut Presentation)) -> bool {
+        let Some(st) = self.docs.iter_mut().find(|d| d.uid == uid) else { return false };
+        let saved = Arc::ptr_eq(&st.doc, &st.saved_doc);
+        f(Arc::make_mut(&mut st.doc));
+        if saved {
+            st.saved_doc = st.doc.clone();
+        }
+        true
+    }
+
     /// Change only the selection (no undo step).
     pub fn select(&mut self, f: impl FnOnce(&Presentation, &mut Selection)) -> Result<()> {
         let st = self.doc_mut()?;
@@ -818,6 +881,33 @@ fn clamp_selection(st: &mut DocState) {
             st.selection.target = Target::Slides
         }
         _ => {}
+    }
+}
+
+/// A text caret and anchor inside the text they edit: the text may have shrunk under them (a
+/// live session's peer edited it).
+fn clamp_text_selection(st: &mut DocState) {
+    let Some(t) = st.selection.text.clone() else { return };
+    let Some(body) = cmd::text::body_of(st, &t) else {
+        st.selection.text = None;
+        st.composition = None;
+        return;
+    };
+    let clamp = |(p, c): (usize, usize)| -> (usize, usize) {
+        let last = body.paragraphs.len().saturating_sub(1);
+        let p = p.min(last);
+        let len = body.paragraphs.get(p).map(|x| x.char_len()).unwrap_or(0);
+        (p, c.min(len))
+    };
+    let (anchor, caret) = (clamp(t.anchor), clamp(t.caret));
+    if (anchor, caret) != (t.anchor, t.caret) {
+        // A composition's preedit sits at a place that moved: keep its text, end it.
+        st.composition = None;
+        if let Some(sel) = st.selection.text.as_mut() {
+            sel.anchor = anchor;
+            sel.caret = caret;
+            sel.line_end = None;
+        }
     }
 }
 
@@ -907,6 +997,8 @@ pub(crate) fn push_undo(st: &mut DocState, e: HistoryEntry) {
     }
 }
 
+#[cfg(test)]
+mod remote_tests;
 #[cfg(test)]
 mod soak_tests;
 #[cfg(test)]

@@ -58,12 +58,12 @@ echo "==> DeckCraft $VERSION for macOS ($ARCH), identity: $IDENTITY, notarize: $
 if [[ "$SKIP_BUILD" = 0 ]]; then
   args=()
   for t in "${TARGETS[@]}"; do args+=(--target "$t"); done
-  (cd "$ROOT" && cargo build --release --locked -p deckcraft -p deckcraft-cli "${args[@]}")
+  (cd "$ROOT" && cargo build --release --locked -p deckcraft -p deckcraft-cli -p deckcraft-server "${args[@]}")
 fi
 
 rm -rf "$WORK"
 mkdir -p "$WORK/bin"
-for bin in deckcraft deckcraft-cli; do
+for bin in deckcraft deckcraft-cli deckcraft-server; do
   inputs=()
   for t in "${TARGETS[@]}"; do inputs+=("$CARGO_TARGET_DIR/$t/release/$bin"); done
   lipo -create -output "$WORK/bin/$bin" "${inputs[@]}"
@@ -118,6 +118,21 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # Executable and icon carry the display name (CFBundleExecutable / CFBundleIconFile).
 cp "$WORK/bin/deckcraft" "$APP/Contents/MacOS/DeckCraft"
 cp "$ROOT/assets/app-icon/deckcraft.icns" "$APP/Contents/Resources/DeckCraft.icns"
+# Live sessions: the server the app starts when the host shares a presentation, and the browser
+# editor it serves to the others (apps/deckcraft-web, built with trunk when it is installed).
+cp "$WORK/bin/deckcraft-server" "$APP/Contents/MacOS/deckcraft-server"
+WEB_DIST="$ROOT/dist/web"
+if command -v trunk >/dev/null; then
+  (cd "$ROOT/apps/deckcraft-web" && trunk build --release)
+fi
+if [[ -f "$WEB_DIST/index.html" ]]; then
+  mkdir -p "$APP/Contents/Resources/web"
+  # Hidden files (trunk's lock, the build marker) stay out of the bundle.
+  find "$WEB_DIST" -maxdepth 1 -type f ! -name '.*' -exec cp {} "$APP/Contents/Resources/web/" \;
+  [[ -d "$WEB_DIST/snippets" ]] && cp -R "$WEB_DIST/snippets" "$APP/Contents/Resources/web/"
+else
+  warn "no browser editor in $WEB_DIST (install trunk): live-session guests can't edit in a browser"
+fi
 # The licences and README, as in the CLI zip, plus the licences of the embedded craft-fonts
 # fonts when built with CRAFT_FONTS_DIR. Before signing, so the seal covers them.
 copy_docs "$APP/Contents/Resources"
@@ -128,7 +143,8 @@ plutil -lint "$APP/Contents/Info.plist"
 printf 'APPL????' >"$APP/Contents/PkgInfo"
 
 # Sign inside-out: nested code first, then the bundle itself (no --deep on the final signature).
-# Today the only nested code is the main executable; frameworks/helpers would be signed here too.
+# Nested code: the live-session server, then the main executable.
+sign --options runtime "$APP/Contents/MacOS/deckcraft-server"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/DeckCraft"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP"
 codesign --verify --strict --deep --verbose=2 "$APP"

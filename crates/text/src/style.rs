@@ -47,6 +47,7 @@ pub(crate) struct Style {
     pub(crate) outline: Option<(Rgba, f64)>,
     pub(crate) link: bool,
     pub(crate) gradient: Option<std::sync::Arc<deckcraft_model::style::Gradient>>,
+    pub(crate) pattern: Option<std::sync::Arc<(String, Rgba, Rgba)>>,
     pub(crate) effects: Option<RunEffects>,
     /// "Regular", "Bold"… for the slot and fallback faces.
     pub(crate) style_name: &'static str,
@@ -119,6 +120,19 @@ fn style_name(bold: bool, italic: bool) -> &'static str {
     }
 }
 
+/// About how much of a DrawingML pattern's cell its foreground covers (0–1).
+fn pattern_coverage(preset: &str) -> f64 {
+    if let Some(n) = preset.strip_prefix("pct").and_then(|n| n.parse::<f64>().ok()) {
+        return (n / 100.0).clamp(0.0, 1.0);
+    }
+    match preset {
+        p if p.starts_with("lt") || p.starts_with("narrow") || p.starts_with("nar") => 0.3,
+        p if p.starts_with("dk") || p.starts_with("wd") => 0.55,
+        p if p.starts_with("sm") || p.starts_with("dot") || p.starts_with("dash") => 0.3,
+        _ => 0.45,
+    }
+}
+
 pub(crate) fn make_style(ctx: &Ctx, r: &RunProps, scale: f64, prompt: Option<Rgba>) -> Style {
     let family = resolve::font_family(ctx, r);
     let bold = r.bold.unwrap_or(false);
@@ -127,6 +141,10 @@ pub(crate) fn make_style(ctx: &Ctx, r: &RunProps, scale: f64, prompt: Option<Rgb
     let fake_bold = bold && face.weight < 550.0;
     let fake_italic = italic && !face.italic;
     let size = (r.size.unwrap_or(18.0) * scale).clamp(0.5, 4000.0);
+    let pattern = match &r.fill {
+        Some(Fill::Pattern(pf)) => Some(std::sync::Arc::new((pf.preset.clone(), ctx.color(&pf.fg, None), ctx.color(&pf.bg, None)))),
+        _ => None,
+    };
     let (mut color, alpha, gradient) = match &r.fill {
         // The resolved colour carries the fill's transparency (`a:alpha`): it is applied once.
         Some(Fill::Solid { color }) => (ctx.color(color, None), 1.0, None),
@@ -139,6 +157,14 @@ pub(crate) fn make_style(ctx: &Ctx, r: &RunProps, scale: f64, prompt: Option<Rgb
             (g.stops.first().map(|s| ctx.color(&s.color, None)).unwrap_or(Rgba::BLACK), 1.0, Some(std::sync::Arc::new(g)))
         }
         Some(Fill::None) => (Rgba::TRANSPARENT, 0.0, None),
+        // A pattern seen at text size: its two colours mixed by how much of the cell the
+        // foreground covers, so hatched WordArt keeps its tone instead of turning black.
+        Some(Fill::Pattern(pf)) => {
+            let (fg, bg) = (ctx.color(&pf.fg, None), ctx.color(&pf.bg, None));
+            let k = pattern_coverage(&pf.preset);
+            let mix = |a: u8, b: u8| (f64::from(a) * k + f64::from(b) * (1.0 - k)).round().clamp(0.0, 255.0) as u8;
+            (Rgba::rgba(mix(fg.r, bg.r), mix(fg.g, bg.g), mix(fg.b, bg.b), mix(fg.a, bg.a)), 1.0, None)
+        }
         _ => (resolve::text_color(ctx, r), 1.0, None),
     };
     if let Some(p) = prompt {
@@ -174,6 +200,7 @@ pub(crate) fn make_style(ctx: &Ctx, r: &RunProps, scale: f64, prompt: Option<Rgb
         outline,
         link: r.link.is_some(),
         gradient,
+        pattern,
         effects: run_effects(ctx, r, scale),
         style_name: style_name(bold, italic),
         lang: r.lang.clone().filter(|l| !l.is_empty()),

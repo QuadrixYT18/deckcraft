@@ -1,0 +1,9 @@
+# Keep build output and local data out of the Docker build context (server/Dockerfile).
+target
+target-*
+dist
+plan
+corpus
+log
+.git
+server/deckcraft-server.env

@@ -368,17 +368,7 @@ impl Renderer {
     /// insets and font sizes stay in points; otherwise `w`, `h` and `m` themselves.
     fn text_space(&self, m: Affine, depth: usize, w: f64, h: f64) -> (f64, f64, Affine) {
         let (_, rel) = self.line_space(m, depth);
-        let c = rel.as_coeffs();
-        let (sx, sy) = (c[0].hypot(c[1]), c[2].hypot(c[3]));
-        let ok = |k: f64| k.is_finite() && k > 1e-9;
-        if depth == 0 || !ok(sx) || !ok(sy) || ((sx - 1.0).abs() < 1e-9 && (sy - 1.0).abs() < 1e-9) {
-            return (w, h, m);
-        }
-        let (tw, th) = (w * sx, h * sy);
-        if !tw.is_finite() || !th.is_finite() {
-            return (w, h, m);
-        }
-        (tw, th, m * Affine::scale_non_uniform(1.0 / sx, 1.0 / sy))
+        crate::placed::text_space(rel, m, depth, w, h)
     }
 
     /// A shape's geometry in its own `w` × `h` space, built at its size on the slide: inside a
@@ -667,14 +657,18 @@ impl Renderer {
     /// Shape-space units per point for the 3-D sizes, measured without the camera's turn (which
     /// `shape_at` puts in `m`): its foreshortening is not a child-coordinate scale.
     fn point_scale(&self, d: &ShapeDraw) -> f64 {
-        let turn = d
-            .effects
+        let turn = self.camera_turn(d);
+        self.per_point(turn.map_or(d.m, |t| d.m * t.inverse()), d.depth)
+    }
+
+    /// The 3-D camera's turn of the shape that `shape_at` put in `m`, if any.
+    fn camera_turn(&self, d: &ShapeDraw) -> Option<Affine> {
+        d.effects
             .as_ref()
             .and_then(|e| e.raw3d.as_deref())
             .and_then(camera::from_raw)
             .and_then(|c| camera::affine(&c, d.w, d.h))
-            .filter(|t| t.determinant().abs() > 1e-9);
-        self.per_point(turn.map_or(d.m, |t| d.m * t.inverse()), d.depth)
+            .filter(|t| t.determinant().abs() > 1e-9)
     }
 
     fn cast_effects(&mut self, ctx: &mut RenderContext, d: &ShapeDraw) {
@@ -742,6 +736,7 @@ impl Renderer {
             let pre = m * turn.inverse();
             let lit = light::Lighting::from_raw(raw);
             let d = ex.depth * pt;
+            let cam = extrude::facing(raw, cam, w, h);
             extrude::draw(ctx, outline, w, h, &cam, d, pre, turn, extrude::side_color(rctx, &ex, face), &lit);
         }
     }
@@ -1078,7 +1073,16 @@ impl Renderer {
         {
             // Text in a group is set at the shape's size on the slide, in points: a group's
             // child-coordinate scale sizes and places the box, never the type (#233's twin).
-            let (tw, th, m) = self.text_space(m, depth, w, h);
+            // The camera's turn (in `m`) foreshortens the box on the slide, not the text's room:
+            // the text is set at the unturned size and then turned with the shape.
+            let (tw, th, m) = match self.camera_turn(d) {
+                Some(turn) => {
+                    let base = m * turn.inverse();
+                    let (tw, th, mb) = self.text_space(base, depth, w, h);
+                    (tw, th, m * base.inverse() * mb)
+                }
+                None => self.text_space(m, depth, w, h),
+            };
             let text_geo;
             let geo = if (tw, th) == (w, h) {
                 geo
@@ -1114,7 +1118,7 @@ impl Renderer {
                 }
             } else if f.opts.edit && s.ph.is_some() {
                 let kind = s.ph_type().unwrap_or(PhType::Body);
-                let prompt_body = prompt_body(rctx, s, kind);
+                let prompt_body = prompt_body(rctx, s, kind, f.opts.prompt);
                 if !prompt_body.is_empty() {
                     let grey = Rgba::rgb(0x59, 0x59, 0x59);
                     draw_text(ctx, rctx, s, &prompt_body, m, &Opts { rect: tr, fields: &f.fields, prompt_color: Some(grey), no_shrink: false });

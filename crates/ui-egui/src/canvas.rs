@@ -16,6 +16,7 @@ use crate::SlideApp;
 use crate::theme::{self, Tokens};
 
 mod context_menu;
+mod crop;
 mod guides;
 mod ime;
 mod input;
@@ -113,7 +114,7 @@ fn wheel_navigation(app: &mut SlideApp, ui: &mut Ui, carry_id: egui::Id, doc_uid
 
 fn empty_deck_prompt(app: &mut SlideApp, ui: &mut Ui, avail: Rect, t: &Tokens) {
     let resp = ui.allocate_rect(avail, Sense::click());
-    ui.painter().text(avail.center(), Align2::CENTER_CENTER, "Click to add first slide", theme::font(22.0), t.text_dim);
+    ui.painter().text(avail.center(), Align2::CENTER_CENTER, tl!("Click to add first slide"), theme::font(22.0), t.text_dim);
     if resp.clicked() {
         let _ = app.run("slide.new", json!({"layout": "title"}));
     }
@@ -152,6 +153,11 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let avail = ui.available_rect_before_wrap();
     app.canvas_rect = Some(avail);
+    // The notes pane and the panes beside the canvas are editor chrome over it: nothing the
+    // canvas paints or hit-tests (the media bar hangs 6 pt below its clip, handles stick out of a
+    // shape, scroll bars) may reach into them. The parent's clip still covers the whole central
+    // area, so clip this `Ui` to the rect the canvas was given (#1922).
+    ui.set_clip_rect(avail.intersect(ui.clip_rect()));
     let Some(st) = app.session.active() else { return };
     // The leftover fraction of a wheel line belongs to one presentation. Drop it whenever another
     // one is drawn here, hovered or not, so switching away and back starts from zero.
@@ -334,9 +340,12 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         ruler(&painter, avail, slide_rect, scale, app.session.prefs.units, &t);
         ruler_markers(app, ui, &painter, avail, xf, &t);
     }
+    let cropping = crop::crop_mode(app, ui, &painter, xf);
     pointer(app, ui, &resp, xf);
     if !app.anim_preview_active() {
-        overlays(app, ui, &painter, xf, &t);
+        if !cropping {
+            overlays(app, ui, &painter, xf, &t);
+        }
         ime_output(app, ui, xf);
         media_bar(app, ui, xf);
         gif_buttons(app, ui, xf, &gifs);

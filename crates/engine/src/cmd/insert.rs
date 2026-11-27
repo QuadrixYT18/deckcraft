@@ -36,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Shapes",
             ["Insert", "Illustrations"],
             None,
-            "{preset: rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string}",
+            "{preset: rect|roundRect|ellipse|triangle|rightArrow|star5|navigationArrow|… (see shape.presets), rect: [x,y,w,h] pt, text?: string}",
             has_slide,
             insert_shape
         ),
@@ -91,14 +91,14 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         cmd!("insert.audio", "Audio from File…", ["Insert", "Media", "Audio"], None, "{path? | data: base64, name?, rect?}", has_slide, audio),
         cmd!("insert.video", "Video from File…", ["Insert", "Media", "Video"], None, "{path? | data: base64, name?, rect?}", has_slide, video),
-        cmd!("insert.wordArt", "WordArt", ["Insert", "Text"], None, "{text?, style?: 0..}", has_slide, word_art),
+        cmd!("insert.wordArt", "Decorative Text", ["Insert", "Text"], None, "{text?, style?: 0..}", has_slide, word_art),
         cmd!("insert.slideNumber", "Slide Number", ["Insert", "Text"], None, "{}", has_slide, slide_number),
         cmd!(
             "insert.dateTime",
             "Date & Time",
             ["Insert", "Text"],
             None,
-            "{format?: datetime1..datetime13, update?: bool, language?: en-US|en-GB|fr-FR|ja-JP|sv-SE} — no keys opens the dialog; in the Handout or Notes Master view it fills the selected date placeholder (else the master's own) and answers where: \"master\"",
+            "{format?: datetime1..datetime13, update?: bool, language?: de-DE|en-US|en-GB|fr-FR|ja-JP|sv-SE} — no keys opens the dialog; in the Handout or Notes Master view it fills the selected date placeholder (else the master's own) and answers where: \"master\"",
             has_slide,
             date_time
         ),
@@ -142,7 +142,7 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         cmd!(
             "insert.smartArt",
-            "SmartArt",
+            "Diagram",
             ["Insert", "Illustrations"],
             None,
             "{kind: list|process|cycle|hierarchy|pyramid|matrix, items?: [text] (leading tabs = sub-points), nodes?: [{text, level}]} → {id}",
@@ -214,6 +214,23 @@ pub(crate) fn add_shape(s: &mut Session, cmd: &str, mut shape: Shape, select: bo
 
 fn insert_shape(s: &mut Session, p: &Value) -> Result<Value> {
     let preset = str_param(p, "preset").unwrap_or("rect");
+    // A gallery shape without preset geometry: a closed freeform in the box, named after it.
+    if let Some(outline) = crate::tools::custom_shape(preset) {
+        let r = rect_param(p, "rect").unwrap_or_else(|| default_rect(s, 72.0, 72.0));
+        let pts: Vec<Value> = outline.iter().map(|(fx, fy)| json!([r.x + fx * r.w, r.y + fy * r.h])).collect();
+        let out = s.execute("shape.freeform", &json!({"points": pts, "closed": true}))?;
+        if let Some(id) = out.get("id").and_then(Value::as_u64) {
+            let label = crate::tools::CUSTOM_SHAPES.iter().find(|c| c.0 == preset).map(|c| c.1).unwrap_or(preset);
+            let name = format!("{label} {id}");
+            s.edit(|doc, sel| {
+                if let Some(sh) = crate::shapes_mut(doc, sel).and_then(|l| deckcraft_model::find_shape_mut(l, deckcraft_model::ShapeId(id as u32))) {
+                    sh.name = name;
+                }
+                Ok(())
+            })?;
+        }
+        return Ok(out);
+    }
     let info = deckcraft_geom::preset::info(preset).ok_or_else(|| bad("shape.insert", format!("unknown preset `{preset}`")))?;
     let line_like = deckcraft_geom::preset::is_line_like(preset);
     let rect = rect_param(p, "rect").unwrap_or_else(|| default_rect(s, 72.0, if line_like { 0.0 } else { 72.0 }));
@@ -475,7 +492,7 @@ mod tests {
             json!({"format": "datetime14"}),
             json!({"format": "nope"}),
             json!({"update": "yes"}),
-            json!({"language": "de-DE"}),
+            json!({"language": "it-IT"}),
             json!({"language": ""}),
         ] {
             let err = s.execute("insert.dateTime", &p).unwrap_err();
@@ -577,3 +594,30 @@ mod tests {
 
 #[cfg(test)]
 mod icon_and_picture_tests;
+
+#[cfg(test)]
+mod custom_shape_tests {
+    use serde_json::json;
+
+    use crate::Session;
+
+    #[test]
+    fn the_navigation_arrow_is_a_filled_freeform_in_its_box_and_survives_pptx() {
+        let mut s = Session::with_new();
+        let r = s.execute("shape.insert", &json!({"preset": "navigationArrow", "rect": [100, 100, 140, 190]})).unwrap();
+        let id = r["id"].as_u64().unwrap() as u32;
+        let sh = s.doc().unwrap().shape(deckcraft_model::ShapeId(id)).cloned().unwrap();
+        let x = sh.xfrm.unwrap();
+        assert!((x.x - 100.0).abs() < 0.5 && (x.w - 140.0).abs() < 0.5 && (x.h - 190.0).abs() < 0.5, "{x:?}");
+        assert!(
+            matches!(&sh.geom, deckcraft_model::Geom::Custom { paths } if paths.iter().any(|p| p.fill != deckcraft_geom::preset::FillMode::None)),
+            "closed and filled"
+        );
+        assert!(sh.name.starts_with("Arrow: Navigation"));
+        // Saved as PowerPoint and opened again, it keeps its custom outline.
+        let bytes = deckcraft_pptx::export(&s.doc().unwrap().doc).unwrap();
+        let back = deckcraft_pptx::import(&bytes).unwrap();
+        let again = back.slides.iter().flat_map(|sl| sl.shapes.iter()).find(|x| x.name == sh.name).unwrap();
+        assert!(matches!(&again.geom, deckcraft_model::Geom::Custom { .. }));
+    }
+}

@@ -16,7 +16,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         let playing = app.anim_preview_active();
         let (resp, _) = big_button_ex(ui, Icon::Preview, "Preview", true, false, playing);
-        if resp.on_hover_text("Play this slide's animations on the canvas").clicked() {
+        if resp.on_hover_text(tl!("Play this slide's animations on the canvas")).clicked() {
             run(app, "animation.preview", json!({}));
         }
     });
@@ -56,7 +56,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
             |i| quick.get(i).map(|a| a.1.to_string()).unwrap_or_default(),
         ) && let Some(a) = quick.get(i)
         {
-            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml()}));
+            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml(), "toggle": true}));
         }
         let more = widgets::drop_button(ui, "", vec2(14.0, 52.0), has_sel);
         egui::Popup::menu(&more).width(420.0).show(|ui| {
@@ -72,7 +72,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
                         }
                         paint_anim_tile(ui.painter(), r.shrink(2.0), a.1, a.2, true);
                         if resp.clicked() {
-                            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml()}));
+                            run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml(), "toggle": true}));
                             ui.close();
                         }
                     }
@@ -86,7 +86,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
         let r = big_button(ui, Icon::EffectOptions, "Effect\nOptions", !effect_rows.is_empty());
         egui::Popup::menu(&r).show(|ui| {
             for &(o, on) in &effect_rows {
-                if ui.selectable_label(on, animation_option_label(effect, o)).clicked() {
+                if ui.selectable_label(on, tl!(&animation_option_label(effect, o))).clicked() {
                     run(app, "animation.options", json!({"option": o}));
                     ui.close();
                 }
@@ -94,7 +94,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
             ui.separator();
             for &(id, on) in &build_rows {
                 let label = if id == "byParagraph" { "By Paragraph" } else { "As One Object" };
-                if ui.selectable_label(on, label).clicked() {
+                if ui.selectable_label(on, tl!(label)).clicked() {
                     run(app, "animation.options", json!({"textBuild": id}));
                     ui.close();
                 }
@@ -130,7 +130,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
         big(app, ui, Icon::AnimationPane, "Animation\nPane", "view.pane", json!({"pane": "animation"}));
         let r = big_button(ui, Icon::Trigger, "Trigger", cur.is_some());
         egui::Popup::menu(&r).show(|ui| {
-            if ui.button("On Click of… (none)").clicked() {
+            if ui.button(tl!("On Click of… (none)")).clicked() {
                 run(app, "animation.timing", json!({"trigger": null}));
             }
             let shapes: Vec<(u32, String)> =
@@ -144,7 +144,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
         let on = app.session.anim_painter.is_some();
         let en = enabled(app, "animation.painter");
         let (r, _) = big_button_ex(ui, Icon::AnimationPainter, "Animation\nPainter", en, false, on);
-        let r = r.on_hover_text("Animation Painter (double-click to keep it on)");
+        let r = r.on_hover_text(tl!("Animation Painter (double-click to keep it on)"));
         if r.double_clicked() {
             run(app, "animation.painter", json!({"sticky": true}));
         } else if r.clicked() {
@@ -158,7 +158,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         rows(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Start:");
+                ui.label(tl!("Start:"));
                 let s = cur.as_ref().map(|c| match c.start {
                     deckcraft_model::AnimStart::OnClick => "On Click",
                     deckcraft_model::AnimStart::WithPrevious => "With Previous",
@@ -174,7 +174,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
                 });
             });
             ui.horizontal(|ui| {
-                ui.label("Duration:");
+                ui.label(tl!("Duration:"));
                 if let Some(v) =
                     widgets::spinner(ui, "adur", "Duration", cur.as_ref().map(|c| c.duration_ms as f64 / 1000.0).unwrap_or(0.5), 0.25, "", 46.0)
                 {
@@ -182,7 +182,7 @@ pub(super) fn animations(app: &mut SlideApp, ui: &mut Ui) {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("Delay:");
+                ui.label(tl!("Delay:"));
                 if let Some(v) =
                     widgets::spinner(ui, "adelay", "Delay", cur.as_ref().map(|c| c.delay_ms as f64 / 1000.0).unwrap_or(0.0), 0.25, "", 46.0)
                 {

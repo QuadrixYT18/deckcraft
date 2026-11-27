@@ -2,13 +2,21 @@
 
 **Stage: alpha** · next: beta, ~20 points and ~120–210 h away
 
-> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-11 · **Change:** trivial (the Opus decoder and the Ogg, MP4 and Matroska demuxers come from craft-libs; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-20 · **Change:** trivial (progress log: WMF scale and offset mapping records place sub-pictures, #2069; scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-16 · **Change:** trivial (progress log: every slide as PNG or JPEG from File › Export › Change File Type and Save As, #2019; scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-15 · **Change:** trivial (DeckCraft v0.19.0 version preparation (#2134); the SmartArt and WordArt display names become Diagram and Decorative Text (#1981) in DeckCraft's own feature labels — commands, contextual tab labels and messages — with the neutral labels guarded by tests (the PowerPoint-matching empty-diagram placeholder prompt still reads "Click icon to add SmartArt graphic", and saved control-channel identifiers such as the tab id "SmartArt Design" keep their keys); the wasm32 build no longer refers to the native-only opening generation (#1954); the control-protocol method reference is corrected (#2132); parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-14 · **Change:** minor (a slide the show advances to again plays its animations again, #2090; slide-list entries with missing relationships are reported as lost slides and open as repaired copies; the Opus decoder and the Ogg, MP4 and Matroska demuxers come from craft-libs; empty notes slides are kept through PPTX and native saves, #2025; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-09 · **Change:** minor (progress log: PowerPoint 97–2003 `.ppt`/`.pot`/`.pps` import, #239) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-07 · **Change:** trivial (progress log: text in a group whose child coordinates scale its shapes is placed for export where the slide draws it; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-11-04 · **Last updated:** 2026-11-04 · **Change:** trivial (Ogg Opus recovery includes trailing packets without granules in its reported duration; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-11-02 · **Last updated:** 2026-11-03 · **Change:** trivial (progress log: web `?host=parent` bridge opens and saves through a same-origin framing page; scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 > **Last reviewed:** 2026-11-02 · **Last updated:** 2026-11-03 · **Change:** trivial (community PR wave 10: PPTX and native saves keep table cell centred anchoring, text overflow, compatible line spacing, normalised character height, Thai distributed alignment, RTL table direction, alternate run language and reflection transforms; imported effects placed by parent time-node delays; Reuse Slides fits the destination size and brings custom table styles; deleted slides leave custom shows; merged shapes drop their animations; Compress Pictures measures grouped pictures at displayed size; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-11-02 · **Last updated:** 2026-11-02 · **Change:** trivial (File › About replaces Account; product links, credits and appearance retained; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-11-01 · **Change:** trivial (progress log: fix for a workflow-breaking regression: Ctrl+C/X/V use the system clipboard again, broken for all text and objects from 0.11.1 to 0.15.0; pasted and duplicated placeholders keep their look; stage and scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-11-01 · **Change:** trivial (locked No Fill and no-outline click-through regression coverage added; No Fill hit-testing follows resolved fill instead of the presence of a style (#1621); scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-28 · **Change:** minor (interface languages from craft-i18n: language setting and German, #15; localization ~8% → ~15%; previous: trivial, progress log: Edit Points handle drags with Shift, Ctrl/Cmd or Alt/Option set the point type) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-30 · **Change:** trivial (print-preview tests use egui's emitted URL, and macOS removes its previews before exit; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-30 · **Change:** trivial (progress log: read-only `slide.actions` lists shape and table text actions; parity scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-27 · **Change:** trivial (progress log: Set Up Slide Show ▸ Keep mouse cursor visible, #1445; stage and scores unchanged) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-26 · **Change:** trivial (progress log: dragging several selected slides moves them all; previous: trivial, progress log: Edit Points handle drags with Shift, Ctrl/Cmd or Alt/Option set the point type; previous: trivial, progress log: scroll bars on the zoomed slide pane, #1157; previous: minor, native chart payloads stored in bounded ZIP members; previous: major, community PR wave 2026-10-14: ~60 landed items in the progress log, among them the Font, Paragraph, Photo Album, theme colour and font and Date and Time dialogs, presenter and show controls, the SmartArt Text Pane and PPTX corpus slices; breadth 84% after `cargo xtask parity`, ready stays ~55%, stage stays alpha; duplicated rows and headers folded; previous: minor, hours to ~95% per audience added) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
@@ -72,7 +80,7 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 | UI/UX fidelity | ~60% | 30–50 | [docs/ui-parity.md](docs/ui-parity.md) |
 | File formats (PPTX, PDF, legacy, export) | ~58% | 60–110 | [docs/file-format-parity.md](docs/file-format-parity.md) |
 | Hardware (GPU raster, video decode, displays, pens) | ~40% | 25–45 | [docs/hardware-parity.md](docs/hardware-parity.md) |
-| Localization | ~8% | 55–90 + native review | [docs/localization-parity.md](docs/localization-parity.md) |
+| Localization | ~15% | 45–80 + native review | [docs/localization-parity.md](docs/localization-parity.md) |
 | Performance (unmeasured) | ~55% | 10–20 | [docs/hardware-parity.md](docs/hardware-parity.md#performance) |
 | Stability | ~60% | 10–20 | [docs/gaps.md](docs/gaps.md#stability) |
 | Platforms | ~80% | 5–10 | [Downloads in README](README.md#downloads) |
@@ -107,7 +115,7 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 
 ## Languages
 
-English only today; no string catalog yet (Ukrainian is in review as PR #34). Detail:
+English and German. Interface text comes from the shared [craft-i18n](https://github.com/storytold/craft-i18n) catalogs (`locales/<lang>/deckcraft.tsv`); the interface follows the system language, or Preferences › Interface language (#15). Detail:
 [docs/localization-parity.md](docs/localization-parity.md).
 
 | Language | Code | UI strings | Status | Hours to full |
@@ -121,11 +129,11 @@ English only today; no string catalog yet (Ukrainian is in review as PR #34). De
 | Portuguese | pt | 0% | none | 3–5 |
 | Indonesian | id | 0% | none | 3–5 |
 | Japanese | ja | 0% | none | 4–7 |
-| German | de | 0% | none | 3–5 |
+| German | de | ~80% | partial | 1–3 |
 | Korean | ko | 0% | none | 4–7 |
 | Vietnamese | vi | 0% | none | 3–5 |
 
-Plus 8–14 h once for the catalog infrastructure. Other languages shipped: none. PowerPoint for Mac
+The catalog infrastructure is in place: a new language is a `deckcraft.tsv` in craft-i18n plus one entry in `LANGUAGES` (`crates/ui-egui/src/i18n.rs`). PowerPoint for Mac
 ships 26.
 
 ## Upcoming
@@ -154,7 +162,19 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-11-25 | Live sessions in the desktop app start the bundled server; the macOS app carries the server and the browser editor |
+| 2026-11-16 | Copilot pane (Home › Copilot, Review › Copilot), offline and free: presentation check with one-click fixes, agenda slide, speaker notes, split crowded slides; Design Ideas get colour ideas and keep a title band with the title |
+| 2026-11-13 | Live sessions: several people edit one presentation at once in the desktop app and the browser (Review › Live Session), with the `deckcraft-collab` sync, `Session::apply_remote` and `deckcraft-server` (dashboard with access code and QR code, join page, tokens, rate limits, atomic saves and backups); see docs/collaboration.md |
+| 2026-11-20 | WMF pictures that draw sub-pictures through the scale and offset mapping records (charts and clip art from older Office versions) place each one in its part of the frame (#2069) |
+| 2026-11-16 | Export: every slide as its own PNG or JPEG picture from File › Export › Change File Type and File › Save As; the Export… dialog adds JPEG images (all slides) (#2019) |
+| 2026-11-15 | DeckCraft v0.19.0 version preparation (#2134); the SmartArt and WordArt display names become Diagram and Decorative Text in DeckCraft's own feature labels — commands, contextual tab labels and messages — with the neutral labels guarded by tests; the wasm32 build no longer refers to the native-only opening generation (#1954); the control-protocol method reference is corrected (#2132) |
+| 2026-11-14 | Slide show: a slide the show advances to again (click, →, Space, automatic advance or a loop) starts over, so its animations play again, as in PowerPoint. Back and links still show it as it was left (#2090) |
+| 2026-11-13 | Interface languages (#2107): the placeholder prompts on slides (`Click to add title`, `Click icon to add picture` …) and the empty canvas's `Click to add first slide` follow the interface language where the catalog translates them (German and French have only `Click to add text` so far); the renderer takes the UI's lookup through `RenderOpts::prompt`, exports and the CLI stay as before, and a language switch redraws the canvas |
+| 2026-11-11 | PPTX: a slide whose notes slide has empty text retains its notesSlide part and relationship on save and reopen (#2025); empty notes slides survive native round trips |
 | 2026-11-11 | Media: the Opus decoder and the Ogg, MP4/MOV and Matroska demuxers are craft-audio and craft-media from craft-libs; DeckCraft's own copies and re-export crates are removed |
+| 2026-11-09 | PowerPoint 97–2003 `.ppt`, `.pot` and `.pps` files open (#239): a new `crates/ppt` reads the compound file, the presentation records and the OfficeArt drawings into the model (masters, title masters as layouts, slides, styled text, shapes, pictures, notes). Saving asks for a new name; a `.pps` from the system starts the show |
+| 2026-11-07 | PPTX slide-list entries with missing relationships are reported in lostSlides instead of silently omitted. The engine opens the partial deck as a repaired copy with no original save path. Slide lists over 10,000 entries are explicitly refused before a partial load; exactly 10,000 remain supported. Synthetic 13-slide regression; does not establish the cause of #1910's field report. |
+| 2026-11-07 | Text inside a group whose child coordinates scale its shapes is laid out for export as the slide draws it, at the shape's size in points, so the PDF text layer and the boxes of its text hyperlinks lie on the drawn text. SmartArt groups, whose child space equals their frame, are unchanged |
 | 2026-11-04 | Ogg Opus recovery keeps trailing packets without granules in the total duration, matching their recovered positions; valid end trimming stays covered |
 | 2026-11-03 | Web: the `?host=parent` bridge (as in GridCraft, WordCraft and PdfCraft) lets a same-origin page that frames DeckCraft send a presentation and store its saves; Save writes an opened .pptx back as .pptx under its own name, as on the desktop |
 | 2026-11-02 | Slide show on Linux and the BSDs: Presenter View stays off when winit lists exactly one display, as in PowerPoint; if it lists none, the setting is kept. On one display the presenter window covered the show, and the hidden window stalled every frame: slide changes took up to ~1.7 s under Hyprland (#1156) |
@@ -171,6 +191,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 | 2026-11-01 | Copy, Cut, Paste, Duplicate and Alt+drag of a title, body or other placeholder on a slide keep its look: the copy is a regular shape that takes the size, font, bullets, indents, autofit and box its layout and master gave it, instead of 18 pt unbulleted text |
 | 2026-11-01 | Clipboard: Ctrl+C, Ctrl+X and Ctrl+V use the system clipboard again, so text and pictures paste from other apps and in-app copies paste back. Since the egui 0.37 migration (#1350) the desktop build had a clipboard that only worked inside the app. On native Wayland, text goes through egui's Wayland clipboard; HTML stays on X11, macOS and Windows |
 | 2026-10-31 | No Fill shape interiors allow selection and editing of underlying objects, even when a quick style remains; hit-testing uses the renderer’s fill resolution. Outlines, rotation, text targets and actual fills keep their hit behaviour (#1621) |
+| 2026-10-28 | Interface languages (#15): DeckCraft reads the craft-i18n catalogs (`CRAFT_I18N_DIR`, pinned in `craft-i18n.rev`), follows the system language and has Preferences › Interface language and `app.language`. German is the first language: ribbon, menus, command palette, status bar, File tab, dialogs and panes |
 | 2026-10-30 | Print-preview tests use the URL emitted by egui and its exact file path; previews are explicitly removed before the macOS process exits |
 | 2026-10-30 | `slide.actions` lists shape click and hover actions and text-run hyperlinks (including table cells and grouped shapes) for audit; listing never runs an action. The UI pane is a follow-up |
 | 2026-10-29 | Slide Show: going back to the previous slide plays the transition of the slide being left, reversed, as PowerPoint does, instead of the previous slide's own entrance transition (#1531); a jump (Go to Slide, links) still plays the target slide's transition |
@@ -341,7 +362,13 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-20 | trivial | Progress log: WMF scale and offset mapping records (#2069); scores unchanged |
+| 2026-11-16 | trivial | Progress log: export all slides as PNG or JPEG from the File tab (#2019); scores unchanged |
+| 2026-11-15 | trivial | v0.19.0 version preparation; Diagram and Decorative Text naming (#1981) scoped to DeckCraft's own labels — the PowerPoint-matching empty-placeholder prompt still reads "Click icon to add SmartArt graphic" and saved control-channel identifiers keep their keys; wasm32 fix (#1954); control-protocol reference fix (#2132); parity scores unchanged |
+| 2026-11-14 | trivial | Progress log: a slide the show advances to again plays its animations again (#2090); parity scores unchanged |
+| 2026-11-11 | minor | Progress log: empty notes slides preserved on PPTX/native save (#2025); parity scores unchanged |
 | 2026-11-11 | trivial | Opus and container code moved to craft-libs crates; parity scores unchanged |
+| 2026-11-07 | trivial | Progress log: text in scaled groups is placed for export where it is drawn; parity scores unchanged |
 | 2026-11-04 | trivial | Ogg Opus recovery duration includes its recovered tail; parity scores unchanged |
 | 2026-11-02 | trivial | Progress log: run alternate-language metadata round-trips through native and PPTX formats; product parity scores unchanged |
 | 2026-11-03 | trivial | Reuse Slides brings referenced custom table styles along; scores unchanged |
@@ -350,6 +377,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 | 2026-11-02 | trivial | Progress log: tiled picture fills keep their size in scaled groups. Scores and milestone names unchanged |
 | 2026-11-01 | trivial | Workflow-breaking regression fixed: the desktop build uses the system clipboard again (eframe `clipboard` feature) |
 | 2026-10-31 | trivial | No Fill hit-testing follows resolved fill instead of the presence of a style (#1621); scores unchanged |
+| 2026-10-28 | minor | Interface languages from craft-i18n with German (#15): Localization ~8% → ~15%, German row partial |
 | 2026-10-30 | trivial | Progress log: read-only slide action inspection; parity scores unchanged |
 | 2026-10-29 | trivial | Progress log: going back in the slide show reverses the left slide's transition (#1531). Scores and milestone names unchanged |
 | 2026-10-29 | trivial | Progress log: the Picture Styles row leaves room for Crop and Size (#1232). Scores and milestone names unchanged |

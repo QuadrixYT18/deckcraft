@@ -50,6 +50,7 @@ impl SlideApp {
             control_rx: None,
             squiggles: Default::default(),
             dialog: None,
+            live: None,
             thesaurus_query: String::new(),
             show: None,
             anim_preview: None,
@@ -72,6 +73,7 @@ impl SlideApp {
             synthetic_injected_time: None,
             ribbon_scroll: HashMap::new(),
             show_instance: 0,
+            #[cfg(not(target_arch = "wasm32"))]
             opening_generation: 0,
             canvas_rect: None,
             eyedropper: None,
@@ -139,7 +141,7 @@ impl SlideApp {
 
     /// Start the helper of an update that is ready, so that it installs once the process has
     /// exited. The desktop shell calls it in `on_exit`, which ends the process on macOS before the
-    /// app is dropped. Later calls do nothing.
+    /// app is dropped. Later calls do nothing, and a Nightly launch never starts a stable update.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn start_pending_update(&mut self) {
         updates_ui::start_pending_update(self);
@@ -234,6 +236,7 @@ impl SlideApp {
             // Inbox results are host file bytes and do not need fonts or a painted frame. A
             // window that starts hidden must still apply a file picked before its first UI pass.
             self.drain_inbox();
+            crate::live::tick(self, ctx);
         }
         self.drain_screenshots();
         // `raw_input_hook` ran before this logic pass. This is normally a no-op now that
@@ -298,6 +301,8 @@ impl SlideApp {
             self.requeue_injected_synthetic();
             return;
         }
+        // The language every label this pass draws is looked up in (Preferences › Language).
+        crate::i18n::set_current(crate::i18n::Lang::from_pref(&self.ui.language));
         let t0 = now_ms();
         let t = theme::Tokens::get(&ctx);
         self.note_ui_text(&ctx);

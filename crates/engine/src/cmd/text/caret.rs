@@ -38,7 +38,94 @@ pub(super) struct CellText {
 
 pub(super) fn insert(s: &mut Session, p: &Value) -> Result<Value> {
     let text = str_param(p, "text").ok_or_else(|| bad("text.insert", "missing `text`"))?.to_string();
-    insert_text(s, &text, None)
+    let r = insert_text(s, &text, None)?;
+    if text == "\n" {
+        space_new_paragraph(s)?;
+    }
+    Ok(r)
+}
+
+/// Space between paragraphs a new one (Enter) gets when nothing else gives it any.
+pub const ENTER_SPACE_PT: f64 = 6.0;
+
+/// After Enter: when neither the new paragraph nor the one before it has space between them
+/// (their own or inherited from the placeholder, layout or master), the new paragraph gets
+/// [`ENTER_SPACE_PT`] above it, so paragraphs don't sit flush. Spacing a template sets is left
+/// as it is; table cells and notes are left alone.
+fn space_new_paragraph(s: &mut Session) -> Result<()> {
+    use deckcraft_model::text::Spacing;
+    let st = s.doc()?;
+    let Some(t) = st.selection.text.clone() else { return Ok(()) };
+    if t.notes || t.cell.is_some() || st.selection.target != crate::Target::Slides || t.caret.0 == 0 {
+        return Ok(());
+    }
+    let (Some(slide), Some(sh)) = (st.current_slide(), st.shape(t.shape)) else { return Ok(()) };
+    let Some(ctx) = deckcraft_model::resolve::Ctx::for_slide(&st.doc, slide) else { return Ok(()) };
+    let Some(body) = sh.text.as_ref() else { return Ok(()) };
+    let (Some(prev), Some(new)) = (body.paragraphs.get(t.caret.0 - 1), body.paragraphs.get(t.caret.0)) else { return Ok(()) };
+    let some = |v: &Option<Spacing>| match v {
+        Some(Spacing::Pts(x)) => *x > 0.01,
+        Some(Spacing::Pct(x)) => *x > 0.0001,
+        None => false,
+    };
+    let (rp, rn) = (deckcraft_model::resolve::para(&ctx, sh, prev), deckcraft_model::resolve::para(&ctx, sh, new));
+    if some(&rp.space_after) || some(&rn.space_before) {
+        return Ok(());
+    }
+    let (id, at) = (t.shape, t.caret.0);
+    s.edit(|doc, sel| {
+        if let Some(sh) = crate::shapes_mut(doc, sel).and_then(|l| deckcraft_model::find_shape_mut(l, id))
+            && let Some(para) = sh.text.as_mut().and_then(|b| b.paragraphs.get_mut(at))
+        {
+            para.props.space_before = Some(Spacing::Pts(ENTER_SPACE_PT));
+        }
+        Ok(())
+    })
+}
+
+#[cfg(test)]
+mod enter_space_tests {
+    use serde_json::json;
+
+    use crate::Session;
+
+    fn space_before(s: &Session, id: u64, para: usize) -> Option<deckcraft_model::text::Spacing> {
+        let sh = s.doc().unwrap().shape(deckcraft_model::ShapeId(id as u32)).cloned().unwrap();
+        sh.text.unwrap().paragraphs[para].props.space_before
+    }
+
+    #[test]
+    fn enter_in_a_flush_text_box_adds_space_but_keeps_a_templates_spacing() {
+        let mut s = Session::with_new();
+        // A text box: no spacing anywhere up its style chain.
+        let r = s.execute("insert.textBox", &json!({"rect": [50, 50, 300, 100], "text": "Eins"})).unwrap();
+        let id = r["id"].as_u64().unwrap();
+        s.execute("text.edit", &json!({"id": id, "end": true})).unwrap();
+        s.key("Enter", Default::default()).unwrap();
+        s.execute("text.insert", &json!({"text": "Zwei"})).unwrap();
+        assert!(space_before(&s, id, 1).is_some(), "the new paragraph is spaced");
+        assert!(space_before(&s, id, 0).is_none(), "the first one is not");
+        // A further Enter keeps the same spacing (the new paragraph takes its neighbour's).
+        s.key("Enter", Default::default()).unwrap();
+        assert_eq!(space_before(&s, id, 2), space_before(&s, id, 1));
+        // The title placeholder of a new deck: the master gives its body text space already, and
+        // a body placeholder keeps that inherited spacing instead of getting its own.
+        let slide = s.execute("slide.new", &json!({"title": "T", "body": "A"})).unwrap();
+        let _ = slide;
+        let body = s
+            .doc()
+            .unwrap()
+            .current_slide()
+            .unwrap()
+            .shapes
+            .iter()
+            .find(|x| x.text.as_ref().is_some_and(|t| t.text() == "A"))
+            .map(|x| x.id.0)
+            .unwrap();
+        s.execute("text.edit", &json!({"id": body, "end": true})).unwrap();
+        s.key("Enter", Default::default()).unwrap();
+        assert!(space_before(&s, body as u64, 1).is_none(), "inherited spacing stays inherited");
+    }
 }
 
 pub(crate) fn delete_dir(s: &mut Session, dir: &str) -> Result<Value> {
@@ -56,7 +143,7 @@ pub(crate) fn delete_dir(s: &mut Session, dir: &str) -> Result<Value> {
             ed::delete(body, a, b)
         } else {
             let other = match dir.as_str() {
-                "forward" => ed::char_move(body, a, true),
+                "forward" => ed::cluster_end(body, a),
                 _ => {
                     // Backspace at the start of an indented/bulleted paragraph outdents first.
                     if a.1 == 0

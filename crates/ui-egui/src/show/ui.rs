@@ -70,6 +70,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         // the show clocks are advanced by logic, not by this draw, so it must not advance them a
         // second time. Keep drawing the last frame rather than returning a blank.
         paint_hidden(ui, &doc, &show);
+        app.ui.swap_displays = show.swap_displays;
         app.show = Some(show);
         return;
     }
@@ -185,6 +186,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
                 current: show.remote_preview.clone().filter(|_| !show.presenter_grid),
                 next: show.remote_next.as_ref().filter(|(n, _)| Some(*n) == next && !show.presenter_grid).map(|(_, image)| image.clone()),
                 slides: show.presenter_grid.then(|| show.remote_grid.clone()),
+                language: crate::i18n::current().code().to_string(),
             });
             show.remote_sent = now;
         }
@@ -502,6 +504,9 @@ fn draw_transition(show: &mut Show, f: &Fr, sl: &Sl, painter: &egui::Painter, te
                 tr.old = Some(crate::textures::upload(ctx, "trans-old", ci));
             }
             let aspect = doc.slide_size.width / doc.slide_size.height.max(1.0);
+            // As PowerPoint: the transition plays inside the slide; the bars around a slide that
+            // doesn't fill the screen stay black, so a pushed slide never shows in them.
+            let painter = painter.with_clip_rect(srect.intersect(painter.clip_rect()));
             let part = |k: usize| tr.parts.as_ref().and_then(|p| p.get(k).cloned().flatten());
             let parts = [part(0), part(1), part(2), part(3)];
             for l in transition_layers(&tr.kind, &tr.option, tr.reverse, p, aspect) {
@@ -769,16 +774,16 @@ fn draw_bars(ui: &mut Ui, show: &mut Show, f: &Fr, painter: &egui::Painter, out:
                 .max_rect(Rect::from_min_max(pos2(bar.max.x - 260.0, bar.min.y), bar.max))
                 .layout(egui::Layout::right_to_left(egui::Align::Center)),
         );
-        if child.button("Close").clicked() {
+        if child.button(tl!("Close")).clicked() {
             out.keep = false;
         }
-        if child.button("▶").clicked() {
+        if child.button(tl!("▶")).clicked() {
             let a = show.state.next(doc);
             if !show.apply(a, doc, now) {
                 out.keep = false;
             }
         }
-        if child.button("◀").clicked() {
+        if child.button(tl!("◀")).clicked() {
             let a = show.state.prev(doc);
             show.apply(a, doc, now);
         }
@@ -851,6 +856,7 @@ fn draw_extras(show: &mut Show, f: &Fr, painter: &egui::Painter, out: &mut Out) 
 fn finish(app: &mut SlideApp, mut show: Show, f: &Fr, keep: bool) {
     let Fr { ctx, now, .. } = *f;
     if keep {
+        app.ui.swap_displays = show.swap_displays;
         app.show = Some(show);
     } else {
         if let Some(host) = app.services.presenter.as_mut() {
