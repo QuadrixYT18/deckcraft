@@ -575,6 +575,19 @@ fn file_face_names(path: &std::path::Path) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Whether the file at `p` starts with a TrueType, OpenType or collection signature.
+#[cfg(not(target_arch = "wasm32"))]
+fn looks_like_font(p: &std::path::Path) -> bool {
+    use std::io::Read as _;
+    let mut head = [0u8; 4];
+    std::fs::File::open(p).and_then(|mut f| f.read_exact(&mut head)).is_ok() && is_font_signature(head)
+}
+
+/// TrueType (`00 01 00 00`, `true`), OpenType (`OTTO`) or a collection (`ttcf`).
+fn is_font_signature(head: [u8; 4]) -> bool {
+    matches!(&head, [0, 1, 0, 0] | b"OTTO" | b"true" | b"ttcf")
+}
+
 /// Folder depth below a font folder that the system scan descends.
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_SCAN_DEPTH: usize = 12;
@@ -1134,7 +1147,10 @@ impl FontDb {
                     continue;
                 }
                 let ext = p.extension().and_then(std::ffi::OsStr::to_str).map(str::to_ascii_lowercase);
-                if !matches!(ext.as_deref(), Some("ttf" | "otf" | "ttc" | "otc")) {
+                // Office keeps the fonts it downloads (CloudFonts) in files named without a font
+                // extension: those are taken when they start like a font file.
+                let cloud = p.components().any(|c| c.as_os_str() == "CloudFonts");
+                if !matches!(ext.as_deref(), Some("ttf" | "otf" | "ttc" | "otc")) && !(cloud && meta.is_file() && looks_like_font(&p)) {
                     continue;
                 }
                 // Only regular files: opening a FIFO named like a font blocks until something
@@ -1757,5 +1773,18 @@ mod font_dir_tests {
         u.sort();
         u.dedup();
         assert_eq!(u.len(), d.len());
+    }
+}
+
+#[cfg(test)]
+mod signature_tests {
+    #[test]
+    fn font_signatures_are_told_from_other_files() {
+        for ok in [[0, 1, 0, 0], *b"OTTO", *b"true", *b"ttcf"] {
+            assert!(super::is_font_signature(ok));
+        }
+        for no in [*b"PK\x03\x04", *b"%PDF", [0, 0, 0, 0]] {
+            assert!(!super::is_font_signature(no));
+        }
     }
 }
