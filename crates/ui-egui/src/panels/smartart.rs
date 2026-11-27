@@ -16,6 +16,35 @@ pub(super) fn smartart(app: &mut SlideApp, ui: &mut Ui) {
     let mut action: Option<(&str, Value)> = None;
     let mut commit: Option<usize> = None;
     let mut focus_row: Option<usize> = None;
+    // The toolbar: add, remove, promote, demote, move up, move down the line with the caret.
+    let row = app.ui.smartart_row.min(d.nodes.len().saturating_sub(1));
+    ui.horizontal(|ui| {
+        let tool = |ui: &mut Ui, glyph: &str, tip: &str| {
+            ui.add(egui::Button::new(egui::RichText::new(glyph).size(16.0)).min_size(egui::vec2(28.0, 26.0))).on_hover_text(tip).clicked()
+        };
+        if tool(ui, "+", tl!("Add a line after this one")) {
+            action = Some(("smartArt.addNode", json!({"index": row, "position": "after"})));
+        }
+        if tool(ui, "−", tl!("Remove this line")) && !d.nodes.is_empty() {
+            action = Some(("smartArt.removeNode", json!({"index": row})));
+            focus_row = Some(row.saturating_sub(1));
+        }
+        if tool(ui, "←", tl!("Promote")) {
+            action = Some(("smartArt.promote", json!({"index": row})));
+            focus_row = Some(row);
+        }
+        if tool(ui, "→", tl!("Demote")) {
+            action = Some(("smartArt.demote", json!({"index": row})));
+            focus_row = Some(row);
+        }
+        if tool(ui, "↑", tl!("Move Up")) {
+            action = Some(("smartArt.move", json!({"index": row, "up": true})));
+        }
+        if tool(ui, "↓", tl!("Move Down")) {
+            action = Some(("smartArt.move", json!({"index": row, "up": false})));
+        }
+    });
+    ui.add_space(4.0);
     ui.label(egui::RichText::new(tl!("Type your text here")).color(Tokens::get(ui.ctx()).text_dim));
     ui.add_space(4.0);
     for (i, node) in d.nodes.iter().enumerate() {
@@ -53,15 +82,6 @@ pub(super) fn smartart(app: &mut SlideApp, ui: &mut Ui) {
             }
         });
     }
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        if ui.button(tl!("+ Add")).clicked() {
-            action = Some(("smartArt.addNode", json!({"index": app.ui.smartart_row.min(d.nodes.len().saturating_sub(1)), "position": "after"})));
-        }
-        if ui.button(tl!("Remove")).clicked() && !d.nodes.is_empty() {
-            action = Some(("smartArt.removeNode", json!({"index": app.ui.smartart_row.min(d.nodes.len() - 1)})));
-        }
-    });
     // Commit a changed line before any structural edit, so the edit sees the new text.
     if let Some(i) = commit
         && drafts.get(i) != texts.get(i)
@@ -80,7 +100,12 @@ pub(super) fn smartart(app: &mut SlideApp, ui: &mut Ui) {
         if let Some(o) = p.as_object_mut() {
             o.insert("id".into(), json!(gid.0));
         }
+        let redraws = d.imported && cmd != "smartArt.setNodes";
         if let Ok(r) = app.run(cmd, p) {
+            if redraws {
+                // Saying so, rather than presenting it as the file's own layout (house rule 15).
+                app.set_status(tl!("The graphic is now drawn with DeckCraft's own layout; Undo brings back the file's look"));
+            }
             let row = r.get("index").and_then(Value::as_u64).map(|v| v as usize).or(focus_row).unwrap_or(0);
             app.ui.smartart_row = row;
             app.ui.smartart_drafts.0 = 0;

@@ -1,3 +1,4 @@
+use super::nodes::move_subtree as move_in;
 use super::nodes::{add, demote_node, nodes_from_lines, normalize, promote_node, remove, sync_text};
 use super::paint::layout;
 use super::{
@@ -124,6 +125,12 @@ pub(super) fn set_nodes(s: &mut Session, p: &Value) -> Result<Value> {
     let one = p.get("index").map(|_| index(p, CMD)).transpose()?;
     let text = str_param(p, "text").map(String::from);
     let title = str_param(p, "title").map(String::from);
+    // One node's text in a graphic from a file: changed in place, so its look stays.
+    if let (None, Some(i), Some(t), None) = (&given, one, text.as_deref(), &title)
+        && let Some(v) = retext_imported(s, p, i, t)?
+    {
+        return Ok(v);
+    }
     edit_diagram(s, p, CMD, |d| {
         if let Some(n) = given {
             d.nodes = n;
@@ -138,10 +145,205 @@ pub(super) fn set_nodes(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+pub(super) fn move_node(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "smartArt.move";
+    let i = index(p, CMD)?;
+    let up = bool_or(p, "up", true);
+    edit_diagram(s, p, CMD, |d| move_in(&mut d.nodes, i, up).map(|at| json!({"index": at})).ok_or_else(|| bad(CMD, "it can't move further")))
+}
+
+/// An imported graphic keeps its look when one node's text changes: the text is put into the
+/// drawing's shape that shows that node (the n-th shape whose text is the node's old text), in
+/// that shape's own formatting. `None` when no shape shows it.
+fn retext_imported(s: &mut Session, p: &Value, i: usize, new: &str) -> Result<Option<Value>> {
+    const CMD: &str = "smartArt.setNodes";
+    let gid = target_group(s, p, CMD)?;
+    let g = shape_of(s, gid)?;
+    let (Some(d), ShapeKind::Group { children, .. }) = (g.diagram.as_ref(), &g.kind) else { return Ok(None) };
+    if !d.imported {
+        return Ok(None);
+    }
+    let Some(old) = d.nodes.get(i).map(|n| n.text.clone()) else { return Err(bad(CMD, "no such node")) };
+    let nth = d.nodes.iter().take(i).filter(|n| n.text == old).count();
+    let mut shown = vec![];
+    deckcraft_model::walk(children, &mut |sh, _| {
+        if sh.text.as_ref().is_some_and(|t| t.text().trim() == old.trim() && !old.trim().is_empty()) {
+            shown.push(sh.id);
+        }
+    });
+    let Some(target) = shown.get(nth).copied() else { return Ok(None) };
+    let new = new.to_string();
+    s.edit(|doc, sel| {
+        let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(CMD, "no slide"))?;
+        let g = deckcraft_model::find_shape_mut(shapes, gid).ok_or_else(|| bad(CMD, "no such shape"))?;
+        if let Some(n) = g.diagram.as_mut().and_then(|d| d.nodes.get_mut(i)) {
+            n.text.clone_from(&new);
+        }
+        let ShapeKind::Group { children, .. } = &mut g.kind else { return Err(bad(CMD, "not a Diagram graphic")) };
+        let sh = deckcraft_model::find_shape_mut(children, target).ok_or_else(|| bad(CMD, "no such shape"))?;
+        if let Some(body) = sh.text.as_mut() {
+            let first = body.paragraphs.first().cloned().unwrap_or_default();
+            let props = first.runs.first().map(|r| r.props.clone()).unwrap_or_default();
+            body.paragraphs = vec![Paragraph { runs: vec![deckcraft_model::Run::with(&new, props)], ..first }];
+        }
+        Ok(())
+    })?;
+    Ok(Some(Value::Null))
+}
+
+/// Where node `i` of an imported graphic shows in its drawing: (index of the child whose text has
+/// the node's text as one of its paragraphs, which paragraph), the n-th such place, n counting
+/// earlier nodes with the same text.
+fn node_place(children: &[Shape], nodes: &[DiagramNode], i: usize) -> Option<(usize, usize)> {
+    let text = nodes.get(i)?.text.trim().to_string();
+    if text.is_empty() {
+        return None;
+    }
+    let nth = nodes.iter().take(i).filter(|n| n.text.trim() == text).count();
+    children
+        .iter()
+        .enumerate()
+        .flat_map(|(k, c)| {
+            let paras: Vec<String> = c.text.as_ref().map(|t| t.paragraphs.iter().map(|p| p.text().trim().to_string()).collect()).unwrap_or_default();
+            // A line split over paragraphs with no line of its own: the whole box.
+            let whole = c.text.as_ref().is_some_and(|t| t.text().replace('\n', " ").trim() == text);
+            let hits: Vec<(usize, usize)> = paras.iter().enumerate().filter(|(_, p)| **p == text).map(|(j, _)| (k, j)).collect();
+            if hits.is_empty() && whole { vec![(k, usize::MAX)] } else { hits }
+        })
+        .nth(nth)
+}
+
+/// The child without text that the text child `k` sits on (a graphic's shape behind its label):
+/// the smallest one whose box holds the label's centre.
+fn body_behind(children: &[Shape], k: usize) -> Option<usize> {
+    let t = children.get(k)?.xfrm?;
+    let (cx, cy) = (t.x + t.w / 2.0, t.y + t.h / 2.0);
+    children
+        .iter()
+        .enumerate()
+        .filter(|(j, c)| *j != k && c.text.as_ref().is_none_or(|b| b.text().trim().is_empty()))
+        .filter_map(|(j, c)| c.xfrm.map(|x| (j, x)))
+        .filter(|(_, x)| cx >= x.x && cx <= x.x + x.w && cy >= x.y && cy <= x.y + x.h)
+        .min_by(|a, b| (a.1.w * a.1.h).total_cmp(&(b.1.w * b.1.h)))
+        .map(|(j, _)| j)
+}
+
+/// Add or remove one line of an imported graphic in its drawing, so the graphic keeps its look.
+/// Removing takes the line and its sub-points out of their boxes (a box left empty goes, with the
+/// shape behind it). Adding after line `i` copies its box and the shape behind it one step
+/// further, repeating the step the lines before it take (so a zigzag stays a zigzag), with
+/// `text`. `None` when the drawing doesn't show the lines plainly enough to do it.
+fn edit_imported_in_place(s: &mut Session, p: &Value, cmd: &'static str, i: usize, add: Option<&str>) -> Result<Option<Value>> {
+    let gid = target_group(s, p, cmd)?;
+    let g = shape_of(s, gid)?;
+    let (Some(d), ShapeKind::Group { children, .. }) = (g.diagram.clone(), g.kind.clone()) else { return Ok(None) };
+    if !d.imported || i >= d.nodes.len() {
+        return Ok(None);
+    }
+    let lv = d.nodes[i].level;
+    let mut end = i + 1;
+    while d.nodes.get(end).is_some_and(|n| n.level > lv) {
+        end += 1;
+    }
+    match add {
+        None => {
+            let Some(places) = (i..end).map(|k| node_place(&children, &d.nodes, k)).collect::<Option<Vec<(usize, usize)>>>() else { return Ok(None) };
+            s.edit(|doc, sel| {
+                let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(cmd, "no slide"))?;
+                let g = deckcraft_model::find_shape_mut(shapes, gid).ok_or_else(|| bad(cmd, "no such shape"))?;
+                let ShapeKind::Group { children, .. } = &mut g.kind else { return Err(bad(cmd, "not a Diagram graphic")) };
+                let mut gone: Vec<usize> = vec![];
+                // Paragraphs last first, so earlier indexes in the same box stay right.
+                let mut by_box = places.clone();
+                by_box.sort_by(|a, b| b.cmp(a));
+                for (k, j) in by_box {
+                    let Some(body) = children.get_mut(k).and_then(|c| c.text.as_mut()) else { continue };
+                    if j != usize::MAX && body.paragraphs.len() > 1 {
+                        body.paragraphs.remove(j.min(body.paragraphs.len() - 1));
+                    } else {
+                        gone.push(k);
+                    }
+                }
+                let behind: Vec<usize> = gone.iter().filter_map(|k| body_behind(children, *k)).collect();
+                gone.extend(behind);
+                gone.sort_unstable();
+                gone.dedup();
+                for k in gone.into_iter().rev() {
+                    children.remove(k);
+                }
+                if let Some(d) = g.diagram.as_mut() {
+                    d.nodes.drain(i..end);
+                }
+                sel.shapes = vec![gid];
+                Ok(())
+            })?;
+            Ok(Some(Value::Null))
+        }
+        Some(text) => {
+            let siblings: Vec<usize> = (0..=i).filter(|k| d.nodes[*k].level == lv).collect();
+            let place = |k: usize| node_place(&children, &d.nodes, k).map(|(c, _)| c);
+            let at = |k: usize| place(k).and_then(|c| children[c].xfrm);
+            let Some(here) = place(i) else { return Ok(None) };
+            let n = siblings.len();
+            // The step to repeat: the one before the last (a zigzag), else the last one.
+            let step = match n {
+                n if n >= 3 => at(siblings[n - 2]).zip(at(siblings[n - 3])).map(|(b, a)| (b.x - a.x, b.y - a.y)),
+                2 => at(siblings[1]).zip(at(siblings[0])).map(|(b, a)| (b.x - a.x, b.y - a.y)),
+                _ => None,
+            };
+            let Some((dx, dy)) = step.filter(|(dx, dy)| dx.abs() >= 0.5 || dy.abs() >= 0.5) else { return Ok(None) };
+            let behind = body_behind(&children, here);
+            let text = text.to_string();
+            let out = s.edit(|doc, sel| {
+                let mut ids = vec![];
+                for _ in 0..2 {
+                    ids.push(ShapeId(doc.alloc_id().ok_or_else(|| bad(cmd, NO_ID_SPACE))?));
+                }
+                let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(cmd, "no slide"))?;
+                let g = deckcraft_model::find_shape_mut(shapes, gid).ok_or_else(|| bad(cmd, "no such shape"))?;
+                let ShapeKind::Group { children, .. } = &mut g.kind else { return Err(bad(cmd, "not a Diagram graphic")) };
+                let moved = |sh: &Shape, id: ShapeId| {
+                    let mut c = sh.clone();
+                    c.id = id;
+                    if let Some(x) = c.xfrm.as_mut() {
+                        x.x += dx;
+                        x.y += dy;
+                    }
+                    c
+                };
+                let mut label = moved(&children[here], ids[0]);
+                if let Some(body) = label.text.as_mut() {
+                    let first = body.paragraphs.first().cloned().unwrap_or_default();
+                    let props = first.runs.first().map(|r| r.props.clone()).unwrap_or_default();
+                    body.paragraphs = vec![Paragraph { runs: vec![deckcraft_model::Run::with(&text, props)], ..first }];
+                }
+                if let Some(b) = behind {
+                    let shape = moved(&children[b], ids[1]);
+                    children.push(shape);
+                }
+                children.push(label);
+                if let Some(d) = g.diagram.as_mut() {
+                    d.nodes.insert(end, DiagramNode { text: text.clone(), level: lv, ..Default::default() });
+                }
+                sel.shapes = vec![gid];
+                Ok(end)
+            })?;
+            Ok(Some(json!({"index": out})))
+        }
+    }
+}
+
 pub(super) fn add_node(s: &mut Session, p: &Value) -> Result<Value> {
     let i = p.get("index").and_then(Value::as_u64).and_then(|v| usize::try_from(v).ok());
     let pos = str_param(p, "position").unwrap_or("after").to_string();
     let text = str_param(p, "text").unwrap_or("").to_string();
+    // After a line of a graphic from a file: continue its drawing, so its look stays.
+    if pos == "after"
+        && let Some(at) = i
+        && let Some(v) = edit_imported_in_place(s, p, "smartArt.addNode", at, Some(if text.is_empty() { "Text" } else { &text }))?
+    {
+        return Ok(v);
+    }
     edit_diagram(s, p, "smartArt.addNode", |d| {
         let at = add(&mut d.nodes, i, &pos, &text);
         Ok(json!({"index": at}))
@@ -151,6 +353,9 @@ pub(super) fn add_node(s: &mut Session, p: &Value) -> Result<Value> {
 pub(super) fn remove_node(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "smartArt.removeNode";
     let i = index(p, CMD)?;
+    if let Some(v) = edit_imported_in_place(s, p, CMD, i, None)? {
+        return Ok(v);
+    }
     edit_diagram(s, p, CMD, |d| if remove(&mut d.nodes, i) { Ok(Value::Null) } else { Err(bad(CMD, "no such node")) })
 }
 
