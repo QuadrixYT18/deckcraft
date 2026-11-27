@@ -27,6 +27,10 @@ egui_extras = { workspace = true }
 craft-ui = { workspace = true }
 craft-i18n = { workspace = true }
 sys-locale = { workspace = true }
+craft-host = { workspace = true }
+craft-keymap = { workspace = true }
+craft-theme = { workspace = true }
+craft-window = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
