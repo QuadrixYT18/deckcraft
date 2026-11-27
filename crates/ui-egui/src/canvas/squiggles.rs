@@ -152,20 +152,7 @@ fn worker(rx: Receiver<Job>, tx: Sender<Done>) {
 }
 
 fn default_lang(st: &DocState) -> String {
-    for sl in &st.doc.slides {
-        let mut found = None;
-        deckcraft_model::walk(&sl.shapes, &mut |sh, _| {
-            if found.is_none()
-                && let Some(t) = &sh.text
-            {
-                found = t.paragraphs.iter().flat_map(|p| &p.runs).find_map(|r| r.props.lang.clone());
-            }
-        });
-        if let Some(l) = found {
-            return l;
-        }
-    }
-    "en-US".into()
+    crate::i18n::doc_text_lang(&st.doc)
 }
 
 /// A word under a squiggle: `(tag, start, end)`.
