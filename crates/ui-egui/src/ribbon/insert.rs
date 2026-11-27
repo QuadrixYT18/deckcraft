@@ -283,9 +283,11 @@ fn diagram_menu(app: &mut SlideApp, ui: &mut Ui) {
     for (kind, ids) in KINDS {
         ui.menu_button(tl!(kind), |ui| {
             for id in ids {
-                if ui.button(tl!(name(id))).clicked() {
-                    let item = tl!("Text");
-                    run(app, "insert.smartArt", json!({"kind": id, "items": [item, item, item]}));
+                let item = tl!("Text");
+                let params = json!({"kind": id, "items": [item, item, item]});
+                let tex = insert_preview(ui.ctx(), &format!("diagram-{id}"), "insert.smartArt", params.clone());
+                if preview_row(ui, tex.as_ref(), tl!(name(id))) {
+                    run(app, "insert.smartArt", params);
                     ui.close();
                 }
             }
@@ -319,11 +321,55 @@ fn chart_menu(app: &mut SlideApp, ui: &mut Ui) {
             for k in types {
                 // "Combo" alone reads as a combo box in German.
                 let label = if *k == T::Combo { tl!("Combo chart") } else { tl!(k.label()) };
-                if ui.button(label).clicked() {
+                let tex = insert_preview(ui.ctx(), &format!("chart-{k:?}"), "insert.chart", json!({"type": format!("{k:?}")}));
+                if preview_row(ui, tex.as_ref(), label) {
                     run(app, "insert.chart", json!({"type": format!("{k:?}")}));
                     ui.close();
                 }
             }
         });
     }
+}
+
+/// A small picture of what `command` with `params` inserts on an empty slide, cut to the inserted
+/// shape: rendered once and kept for the menus.
+fn insert_preview(ctx: &egui::Context, key: &str, command: &str, params: serde_json::Value) -> Option<egui::TextureHandle> {
+    type Cache = std::collections::HashMap<String, Option<egui::TextureHandle>>;
+    let cache_id = egui::Id::unique("insert-previews");
+    if let Some(hit) =
+        ctx.data(|d| d.get_temp::<std::sync::Arc<std::sync::Mutex<Cache>>>(cache_id)).and_then(|c| c.lock().ok().and_then(|m| m.get(key).cloned()))
+    {
+        return hit;
+    }
+    let made = (|| {
+        let mut s = deckcraft_engine::Session::with_new();
+        let id = s.execute(command, &params).ok()?.get("id")?.as_u64()?;
+        let st = s.doc().ok()?;
+        let x = st.shape(deckcraft_model::ShapeId(u32::try_from(id).ok()?))?.xfrm?;
+        let doc = &st.doc;
+        let scale = 240.0 / doc.slide_size.width.max(1.0);
+        let img = deckcraft_render::render_slide(doc, 0, &deckcraft_render::RenderOpts { scale, ..Default::default() });
+        let full = crate::textures::to_color_image(&img, false);
+        let [w, h] = full.size;
+        let px = |v: f64, max: usize| ((v * scale).round().max(0.0) as usize).min(max);
+        let (x0, y0) = (px(x.x - 4.0, w), px(x.y - 4.0, h));
+        let (x1, y1) = (px(x.x + x.w + 4.0, w), px(x.y + x.h + 4.0, h));
+        (x1 > x0 + 2 && y1 > y0 + 2).then(|| full.region_by_pixels([x0, y0], [x1 - x0, y1 - y0]))
+    })()
+    .map(|img| crate::textures::upload_editor(ctx, format!("insert-preview-{key}"), img));
+    let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<std::sync::Arc<std::sync::Mutex<Cache>>>(cache_id).clone());
+    if let Ok(mut m) = cache.lock() {
+        m.insert(key.to_string(), made.clone());
+    }
+    made
+}
+
+/// A menu row with a preview picture beside its name.
+fn preview_row(ui: &mut Ui, tex: Option<&egui::TextureHandle>, label: &str) -> bool {
+    let size = vec2(64.0, 40.0);
+    let button = match tex {
+        Some(t) => egui::Button::image_and_text(egui::Image::new(t).fit_to_exact_size(size).maintain_aspect_ratio(true), label),
+        None => egui::Button::new(label),
+    };
+    ui.add(button.min_size(vec2(0.0, size.y + 6.0))).clicked()
 }
