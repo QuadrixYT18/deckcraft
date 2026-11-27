@@ -49,6 +49,10 @@ pub struct Show {
     pub rehearse: bool,
     /// Set Up Slide Show ▸ Keep mouse cursor visible: a still pointer is not hidden (#1445).
     pub keep_cursor: bool,
+    /// Presentation and Presenter View on each other's display (Swap Displays), remembered.
+    pub swap_displays: bool,
+    /// Whether this show has put the windows where `swap_displays` wants them.
+    pub(crate) swap_done: bool,
     timeline: Option<(usize, Timeline)>,
     step_start: f64,
     slide_start: f64,
@@ -227,6 +231,8 @@ impl Show {
             autoplay: false,
             rehearse: false,
             keep_cursor: false,
+            swap_displays: false,
+            swap_done: false,
             timeline: None,
             step_start: 0.0,
             slide_start: 0.0,

@@ -70,6 +70,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         // the show clocks are advanced by logic, not by this draw, so it must not advance them a
         // second time. Keep drawing the last frame rather than returning a blank.
         paint_hidden(ui, &doc, &show);
+        app.ui.swap_displays = show.swap_displays;
         app.show = Some(show);
         return;
     }
@@ -855,6 +856,7 @@ fn draw_extras(show: &mut Show, f: &Fr, painter: &egui::Painter, out: &mut Out) 
 fn finish(app: &mut SlideApp, mut show: Show, f: &Fr, keep: bool) {
     let Fr { ctx, now, .. } = *f;
     if keep {
+        app.ui.swap_displays = show.swap_displays;
         app.show = Some(show);
     } else {
         if let Some(host) = app.services.presenter.as_mut() {

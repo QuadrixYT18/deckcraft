@@ -153,6 +153,11 @@ pub(super) fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &std::
             if !keyboard(ui.ctx(), show, doc, now, true) {
                 *keep = false;
             }
+            // Swapped last time: put the windows that way again once both are open.
+            if show.swap_displays && !show.swap_done && ui.ctx().input(|i| i.viewport().outer_rect.is_some()) {
+                show.swap_done = true;
+                swap_displays(ui.ctx());
+            }
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
             let elapsed = show.timer.elapsed(now);
             let paused = show.timer.paused();
@@ -175,6 +180,8 @@ pub(super) fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &std::
                             .on_hover_text(tl!("Show the presentation where this window is, and this window where the presentation is"))
                             .clicked()
                         {
+                            show.swap_displays = !show.swap_displays;
+                            show.swap_done = true;
                             swap_displays(ui.ctx());
                         }
                         if button(ui, "Next ▶").clicked() {
