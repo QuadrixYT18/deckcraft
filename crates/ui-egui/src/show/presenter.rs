@@ -171,6 +171,12 @@ pub(super) fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &std::
                         if button(ui, "End Show").clicked() {
                             *keep = false;
                         }
+                        if button(ui, tl!("Swap Displays"))
+                            .on_hover_text(tl!("Show the presentation where this window is, and this window where the presentation is"))
+                            .clicked()
+                        {
+                            swap_displays(ui.ctx());
+                        }
                         if button(ui, "Next ▶").clicked() {
                             actions.push(show.state.next(doc));
                         }
@@ -298,4 +304,19 @@ pub(super) fn presenter_notes(ui: &mut Ui, notes: &deckcraft_model::text::TextBo
     } else {
         crate::notes::view(ui, notes, &crate::notes::Look { size: px, color: Some(color) })
     }
+}
+
+/// Swap Displays: the audience window (the main window, full screen) moves to where the Presenter
+/// View is, and the Presenter View to where the audience was. Each window goes to the other's
+/// top-left corner, so it lands on the other's display.
+fn swap_displays(ctx: &egui::Context) {
+    let presenter = ctx.input(|i| i.viewport().outer_rect);
+    let audience = ctx.input_for(egui::ViewportId::ROOT, |i| i.viewport().outer_rect);
+    let (Some(p), Some(a)) = (presenter, audience) else { return };
+    let root = egui::ViewportId::ROOT;
+    ctx.send_viewport_cmd_to(root, egui::ViewportCommand::Fullscreen(false));
+    ctx.send_viewport_cmd_to(root, egui::ViewportCommand::OuterPosition(p.min + egui::vec2(20.0, 20.0)));
+    ctx.send_viewport_cmd_to(root, egui::ViewportCommand::Fullscreen(true));
+    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(a.min + egui::vec2(20.0, 20.0)));
+    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
 }
