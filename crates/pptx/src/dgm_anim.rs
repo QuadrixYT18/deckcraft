@@ -45,17 +45,31 @@ fn frames(e: &El, out: &mut HashMap<u32, String>, depth: usize) {
     }
 }
 
-/// The `modelId`s of a diagram drawing's shapes, in drawing order.
-fn drawing_ids(e: &El, out: &mut Vec<String>, depth: usize) {
+/// A diagram drawing's shapes in drawing order: each `modelId` with the boxes (points, in the
+/// drawing's space) its shape and its text sit in.
+fn drawing_parts(e: &El, out: &mut Vec<(String, Vec<[f64; 4]>)>, depth: usize) {
     if depth > 64 {
         return;
     }
+    let rect = |x: &El| -> Option<[f64; 4]> {
+        let off = x.child(Local("off"))?;
+        let ext = x.child(Local("ext"))?;
+        let n = |el: &El, k: &str| el.attr_local(k).and_then(|v| v.parse::<f64>().ok()).map(|v| v / 12_700.0);
+        Some([n(off, "x")?, n(off, "y")?, n(ext, "cx")?, n(ext, "cy")?])
+    };
     for c in e.elements() {
         if c.is(Local("sp")) {
-            out.push(c.attr_local("modelId").unwrap_or("").to_string());
+            let mut boxes = vec![];
+            if let Some(r) = c.child(Local("spPr")).and_then(|p| p.child(Local("xfrm"))).and_then(rect) {
+                boxes.push(r);
+            }
+            if let Some(r) = c.child(Local("txXfrm")).and_then(rect) {
+                boxes.push(r);
+            }
+            out.push((c.attr_local("modelId").unwrap_or("").to_string(), boxes));
             continue;
         }
-        drawing_ids(c, out, depth + 1);
+        drawing_parts(c, out, depth + 1);
     }
 }
 
@@ -83,7 +97,7 @@ pub(crate) fn retarget(
     let mut by_frame = HashMap::new();
     frames(slide_xml, &mut by_frame, 0);
     // modelId → part shape, per diagram frame.
-    let mut parts: HashMap<u32, HashMap<String, ShapeId>> = HashMap::new();
+    let mut parts: HashMap<u32, HashMap<String, Vec<ShapeId>>> = HashMap::new();
     for spid in targets.iter().filter(|(_, p)| p.is_some()).map(|(s, _)| *s) {
         if parts.contains_key(&spid) {
             continue;
@@ -93,18 +107,33 @@ pub(crate) fn retarget(
         let Some(data) = read(&data_path) else { continue };
         let Some(drawing_rel) = data.find(Local("dataModelExt")).and_then(|x| x.attr_local("relId")).map(str::to_string) else { continue };
         let Some(drawing) = slide_rels(&drawing_rel).and_then(|p| read(&p)) else { continue };
-        let mut ids = vec![];
-        drawing_ids(&drawing, &mut ids, 0);
-        if ids.len() != children.len() {
-            continue;
+        let mut drawn = vec![];
+        drawing_parts(&drawing, &mut drawn, 0);
+        // Each part's shapes: the group's children that sit where the part or its text does
+        // (the import may give a part's text a shape of its own).
+        let near = |a: &[f64; 4], c: &Shape| {
+            c.xfrm.is_some_and(|x| (x.x - a[0]).abs() < 1.0 && (x.y - a[1]).abs() < 1.0 && (x.w - a[2]).abs() < 1.0 && (x.h - a[3]).abs() < 1.0)
+        };
+        let mut map: HashMap<String, Vec<ShapeId>> = HashMap::new();
+        for (model, boxes) in drawn.into_iter().filter(|(m, _)| !m.is_empty()) {
+            let ids: Vec<ShapeId> = children.iter().filter(|c| boxes.iter().any(|b| near(b, c))).map(|c| c.id).collect();
+            if !ids.is_empty() {
+                map.insert(model, ids);
+            }
         }
-        parts.insert(spid, ids.into_iter().zip(children.iter().map(|c| c.id)).filter(|(m, _)| !m.is_empty()).collect());
+        parts.insert(spid, map);
     }
-    for ((spid, part), a) in targets.iter().zip(slide.animations.iter_mut()) {
-        if let Some(part) = part
-            && let Some(child) = parts.get(spid).and_then(|m| m.get(part))
-        {
-            a.shape = *child;
+    let mut out = Vec::with_capacity(slide.animations.len());
+    for ((spid, part), a) in targets.iter().zip(slide.animations.drain(..)) {
+        match part.as_ref().and_then(|p| parts.get(spid)?.get(p)) {
+            Some(ids) => {
+                for (k, id) in ids.iter().enumerate() {
+                    let start = if k == 0 { a.start } else { deckcraft_model::anim::AnimStart::WithPrevious };
+                    out.push(deckcraft_model::anim::Animation { shape: *id, start, ..a.clone() });
+                }
+            }
+            None => out.push(a),
         }
     }
+    slide.animations = out;
 }
