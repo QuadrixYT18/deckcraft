@@ -72,7 +72,8 @@ pub(super) fn insert(app: &mut SlideApp, ui: &mut Ui) {
         });
         let r = big_button(ui, Icon::Icons, "Icons", enabled(app, "insert.icon"));
         egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).width(340.0).show(|ui| icon_library(app, ui));
-        big(app, ui, Icon::SmartArt, "Diagram", "app.dialog", json!({"id": "smartart"}));
+        let r = big_button(ui, Icon::SmartArt, "Diagram", enabled(app, "insert.smartArt"));
+        egui::Popup::menu(&r).show(|ui| diagram_menu(app, ui));
         let r = big_button(ui, Icon::Chart, "Chart", enabled(app, "insert.chart"));
         egui::Popup::menu(&r).show(|ui| {
             for k in chart_menu_types() {
@@ -271,4 +272,39 @@ pub(super) fn chart_menu_types() -> Vec<Option<deckcraft_model::chart::ChartType
     v.push(None);
     v.extend(ChartType::OFFICE_2016.iter().copied().filter(|k| !ChartType::MAIN.contains(k)).map(Some));
     v
+}
+
+/// Insert › Diagram: the layouts by kind, each a submenu; a click inserts that layout with
+/// three sample items. More Diagrams… opens the dialog (layout picker and your own items).
+fn diagram_menu(app: &mut SlideApp, ui: &mut Ui) {
+    const KINDS: [(&str, &[&str]); 9] = [
+        ("List layouts", &["list", "blockList", "hBulletList", "verticalBoxList", "trapezoidList", "tableList"]),
+        ("Process", &["process", "chevron", "verticalProcess", "stepUp", "accentProcess", "continuousBlockProcess", "bendingProcess"]),
+        ("Cycle", &["cycle", "textCycle", "blockCycle", "continuousCycle", "segmentedCycle", "multidirectionalCycle", "radial"]),
+        ("Hierarchy", &["orgChart", "nameTitleOrgChart", "halfCircleOrgChart", "hierarchy", "horizontalHierarchy"]),
+        ("Relationship", &["venn", "linearVenn", "stackedVenn", "target", "nestedTarget", "pie", "gear", "funnel"]),
+        ("Matrix", &["matrix", "titledMatrix", "gridMatrix", "cycleMatrix"]),
+        ("Pyramid", &["pyramid", "invertedPyramid", "segmentedPyramid"]),
+        ("Picture", &["pictureList", "pictureCaption", "pictureProcess", "pictureHList"]),
+        ("Timeline layouts", &["timeline"]),
+    ];
+    fn name(id: &'static str) -> &'static str {
+        deckcraft_engine::cmd::smartart::LAYOUTS.iter().find(|(k, _)| *k == id).map_or(id, |(_, n)| *n)
+    }
+    for (kind, ids) in KINDS {
+        ui.menu_button(tl!(kind), |ui| {
+            for id in ids {
+                if ui.button(tl!(name(id))).clicked() {
+                    let item = tl!("Text");
+                    run(app, "insert.smartArt", json!({"kind": id, "items": [item, item, item]}));
+                    ui.close();
+                }
+            }
+        });
+    }
+    ui.separator();
+    if ui.button(tl!("More Diagrams…")).clicked() {
+        run(app, "app.dialog", json!({"id": "smartart"}));
+        ui.close();
+    }
 }
