@@ -32,6 +32,35 @@ pub fn normalize(nodes: &mut [DiagramNode]) {
     }
 }
 
+/// Move node `i` with its sub-points before the previous node of its level (`up`) or after the
+/// next one, as Move Up / Move Down do. Returns its new index, or `None` when it can't move.
+pub fn move_subtree(nodes: &mut Vec<DiagramNode>, i: usize, up: bool) -> Option<usize> {
+    let lv = nodes.get(i)?.level;
+    let end = subtree_end(nodes, i);
+    if up {
+        // The previous sibling: the nearest earlier node of the same level, with no shallower node between.
+        let mut j = i.checked_sub(1)?;
+        while nodes.get(j)?.level > lv {
+            j = j.checked_sub(1)?;
+        }
+        if nodes.get(j)?.level != lv {
+            return None;
+        }
+        let block: Vec<DiagramNode> = nodes.drain(i..end).collect();
+        nodes.splice(j..j, block);
+        Some(j)
+    } else {
+        if nodes.get(end)?.level != lv {
+            return None;
+        }
+        let next_end = subtree_end(nodes, end);
+        let block: Vec<DiagramNode> = nodes.drain(i..end).collect();
+        let at = i + (next_end - end);
+        nodes.splice(at..at, block);
+        Some(at)
+    }
+}
+
 /// Index one past the last descendant of node `i`.
 fn subtree_end(nodes: &[DiagramNode], i: usize) -> usize {
     let lv = nodes.get(i).map(|n| n.level).unwrap_or(0);

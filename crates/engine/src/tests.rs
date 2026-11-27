@@ -7652,3 +7652,50 @@ fn bold_off_at_the_caret_applies_to_what_is_typed_next() {
     let plain_text: String = runs.iter().filter(|r| r.props.bold != Some(true)).map(|r| r.text.as_str()).collect();
     assert_eq!((bold_text.as_str(), plain_text.as_str()), ("Hello", " wo"), "{runs:?}");
 }
+
+#[test]
+fn diagram_nodes_move_with_their_sub_points() {
+    use deckcraft_model::DiagramNode;
+    let n = |t: &str, level: u8| DiagramNode { text: t.into(), level, ..Default::default() };
+    let mut v = vec![n("A", 0), n("a1", 1), n("B", 0), n("b1", 1), n("C", 0)];
+    assert_eq!(crate::cmd::smartart::move_subtree(&mut v, 2, true), Some(0));
+    let texts: Vec<&str> = v.iter().map(|x| x.text.as_str()).collect();
+    assert_eq!(texts, ["B", "b1", "A", "a1", "C"]);
+    assert_eq!(crate::cmd::smartart::move_subtree(&mut v, 2, false), Some(3));
+    let texts: Vec<&str> = v.iter().map(|x| x.text.as_str()).collect();
+    assert_eq!(texts, ["B", "b1", "C", "A", "a1"]);
+    assert_eq!(crate::cmd::smartart::move_subtree(&mut v, 0, true), None, "the first can't go up");
+}
+
+#[test]
+fn editing_one_line_of_an_imported_diagram_keeps_its_shapes() {
+    let mut s = session();
+    let id = s.execute("insert.smartArt", &json!({"kind": "process", "items": ["Eins", "Zwei", "Drei"]})).unwrap()["id"].as_u64().unwrap();
+    let gid = deckcraft_model::ShapeId(id as u32);
+    // As if read from a file whose layout DeckCraft doesn't draw itself.
+    {
+        let st = s.doc_mut().unwrap();
+        let doc = std::sync::Arc::make_mut(&mut st.doc);
+        let slide = std::sync::Arc::make_mut(&mut doc.slides[0]);
+        let g = deckcraft_model::find_shape_mut(&mut slide.shapes, gid).unwrap();
+        g.diagram.as_mut().unwrap().imported = true;
+    }
+    let ids = |s: &Session| -> Vec<u32> {
+        let g = s.doc().unwrap().shape(gid).cloned().unwrap();
+        let deckcraft_model::ShapeKind::Group { children, .. } = g.kind else { panic!("group") };
+        children.iter().map(|c| c.id.0).collect()
+    };
+    let before = ids(&s);
+    s.execute("edit.select", &json!({"ids": [id]})).unwrap();
+    s.execute("smartArt.setNodes", &json!({"index": 1, "text": "Zwei neu"})).unwrap();
+    assert_eq!(ids(&s), before, "the drawing's shapes stay");
+    let g = s.doc().unwrap().shape(gid).cloned().unwrap();
+    assert!(g.diagram.as_ref().unwrap().imported);
+    let mut texts = vec![];
+    deckcraft_model::walk(std::slice::from_ref(&g), &mut |sh, _| {
+        if let Some(t) = &sh.text {
+            texts.push(t.text());
+        }
+    });
+    assert!(texts.iter().any(|t| t == "Zwei neu") && !texts.iter().any(|t| t == "Zwei"), "{texts:?}");
+}

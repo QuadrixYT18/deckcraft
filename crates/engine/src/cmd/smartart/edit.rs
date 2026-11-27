@@ -1,3 +1,4 @@
+use super::nodes::move_subtree as move_in;
 use super::nodes::{add, demote_node, nodes_from_lines, normalize, promote_node, remove, sync_text};
 use super::paint::layout;
 use super::{
@@ -124,6 +125,12 @@ pub(super) fn set_nodes(s: &mut Session, p: &Value) -> Result<Value> {
     let one = p.get("index").map(|_| index(p, CMD)).transpose()?;
     let text = str_param(p, "text").map(String::from);
     let title = str_param(p, "title").map(String::from);
+    // One node's text in a graphic from a file: changed in place, so its look stays.
+    if let (None, Some(i), Some(t), None) = (&given, one, text.as_deref(), &title)
+        && let Some(v) = retext_imported(s, p, i, t)?
+    {
+        return Ok(v);
+    }
     edit_diagram(s, p, CMD, |d| {
         if let Some(n) = given {
             d.nodes = n;
@@ -136,6 +143,52 @@ pub(super) fn set_nodes(s: &mut Session, p: &Value) -> Result<Value> {
         }
         Ok(Value::Null)
     })
+}
+
+pub(super) fn move_node(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "smartArt.move";
+    let i = index(p, CMD)?;
+    let up = bool_or(p, "up", true);
+    edit_diagram(s, p, CMD, |d| move_in(&mut d.nodes, i, up).map(|at| json!({"index": at})).ok_or_else(|| bad(CMD, "it can't move further")))
+}
+
+/// An imported graphic keeps its look when one node's text changes: the text is put into the
+/// drawing's shape that shows that node (the n-th shape whose text is the node's old text), in
+/// that shape's own formatting. `None` when no shape shows it.
+fn retext_imported(s: &mut Session, p: &Value, i: usize, new: &str) -> Result<Option<Value>> {
+    const CMD: &str = "smartArt.setNodes";
+    let gid = target_group(s, p, CMD)?;
+    let g = shape_of(s, gid)?;
+    let (Some(d), ShapeKind::Group { children, .. }) = (g.diagram.as_ref(), &g.kind) else { return Ok(None) };
+    if !d.imported {
+        return Ok(None);
+    }
+    let Some(old) = d.nodes.get(i).map(|n| n.text.clone()) else { return Err(bad(CMD, "no such node")) };
+    let nth = d.nodes.iter().take(i).filter(|n| n.text == old).count();
+    let mut shown = vec![];
+    deckcraft_model::walk(children, &mut |sh, _| {
+        if sh.text.as_ref().is_some_and(|t| t.text().trim() == old.trim() && !old.trim().is_empty()) {
+            shown.push(sh.id);
+        }
+    });
+    let Some(target) = shown.get(nth).copied() else { return Ok(None) };
+    let new = new.to_string();
+    s.edit(|doc, sel| {
+        let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(CMD, "no slide"))?;
+        let g = deckcraft_model::find_shape_mut(shapes, gid).ok_or_else(|| bad(CMD, "no such shape"))?;
+        if let Some(n) = g.diagram.as_mut().and_then(|d| d.nodes.get_mut(i)) {
+            n.text.clone_from(&new);
+        }
+        let ShapeKind::Group { children, .. } = &mut g.kind else { return Err(bad(CMD, "not a Diagram graphic")) };
+        let sh = deckcraft_model::find_shape_mut(children, target).ok_or_else(|| bad(CMD, "no such shape"))?;
+        if let Some(body) = sh.text.as_mut() {
+            let first = body.paragraphs.first().cloned().unwrap_or_default();
+            let props = first.runs.first().map(|r| r.props.clone()).unwrap_or_default();
+            body.paragraphs = vec![Paragraph { runs: vec![deckcraft_model::Run::with(&new, props)], ..first }];
+        }
+        Ok(())
+    })?;
+    Ok(Some(Value::Null))
 }
 
 pub(super) fn add_node(s: &mut Session, p: &Value) -> Result<Value> {

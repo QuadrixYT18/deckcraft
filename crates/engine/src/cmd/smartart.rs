@@ -24,10 +24,11 @@ mod nodes;
 mod paint;
 
 use edit::{
-    add_node, change_colors, change_layout, change_style, demote, from_text, nodes, promote, remove_node, set_nodes, set_picture, to_shapes, to_text,
+    add_node, change_colors, change_layout, change_style, demote, from_text, move_node, nodes, promote, remove_node, set_nodes, set_picture,
+    to_shapes, to_text,
 };
 pub use edit::{insert, selected};
-pub use nodes::{add, demote_node, nodes_from_lines, normalize, promote_node, remove};
+pub use nodes::{add, demote_node, move_subtree, nodes_from_lines, normalize, promote_node, remove};
 pub use paint::{BRICK_CAMERA, is_3d, layout};
 #[cfg(test)]
 use paint::{MIN_SCALE, accent, layout_items, shade};
@@ -213,6 +214,15 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         cmd!("smartArt.promote", "Promote", ["Diagram Design", "Create Graphic"], None, "{id?, index}", has_selection, promote),
         cmd!("smartArt.demote", "Demote", ["Diagram Design", "Create Graphic"], None, "{id?, index}", has_selection, demote),
+        cmd!(
+            "smartArt.move",
+            "Move Up / Move Down",
+            ["Diagram Design", "Create Graphic"],
+            None,
+            "{id?, index, up?: bool (default true)} → {index} (the node moves with its sub-points past its neighbour of the same level)",
+            has_selection,
+            move_node
+        ),
         cmd!(
             "smartArt.layout",
             "Change Layout",
